@@ -156,7 +156,10 @@ This is an open research project. Contributions welcome:
 
 ## 📜 Citation
 
-If you use this work, please cite:
+This project consists of both a research paper and software implementation, each with its own DOI:
+
+### Paper (Theory)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18437600.svg)](https://doi.org/10.5281/zenodo.18437600)
 
 ```bibtex
 @misc{riner2026wavelength,
@@ -168,6 +171,24 @@ If you use this work, please cite:
   url = {https://doi.org/10.5281/zenodo.18437600}
 }
 ```
+
+### Software (Implementation)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18450479.svg)](https://doi.org/10.5281/zenodo.18450479)
+
+```bibtex
+@software{riner2026wavelengthsoftware,
+  author = {Riner, Christopher},
+  title = {Wavelength-Division Ternary Optical Computer},
+  year = {2026},
+  publisher = {Zenodo},
+  version = {v1.0.1},
+  doi = {10.5281/zenodo.18450479},
+  url = {https://doi.org/10.5281/zenodo.18450479}
+}
+```
+
+**Cite the paper** for the theoretical foundation and research methodology.  
+**Cite the software** when referring to the implementation, code, or hardware designs.
 
 ## 📄 Open Source Licensing
 
