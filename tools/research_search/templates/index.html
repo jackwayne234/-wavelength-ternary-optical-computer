@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Research Literature Search - arXiv | IEEE | Zenodo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+            padding: 20px;
+        }
+
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+
+        header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .search-container {
+            background: white;
+            border-radius: 15px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            margin-bottom: 30px;
+        }
+
+        .search-box {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        #searchInput {
+            flex: 1;
+            padding: 15px 20px;
+            font-size: 1.1em;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            transition: border-color 0.3s;
+        }
+
+        #searchInput:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        #searchButton {
+            padding: 15px 30px;
+            font-size: 1.1em;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        #searchButton:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        #searchButton:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .sources {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .source-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: #f5f5f5;
+            border-radius: 20px;
+            font-size: 0.9em;
+        }
+
+        .source-badge input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 40px;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .results {
+            display: none;
+        }
+
+        .results.active {
+            display: block;
+        }
+
+        .results-header {
+            background: white;
+            border-radius: 15px;
+            padding: 20px 40px;
+            margin-bottom: 20px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+        }
+
+        .results-header h2 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .stats {
+            display: flex;
+            gap: 20px;
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .source-section {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+        }
+
+        .source-title {
+            font-size: 1.5em;
+            color: #667eea;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #667eea;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .paper {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-left: 4px solid #667eea;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .paper:hover {
+            transform: translateX(5px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .paper-title {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+            line-height: 1.4;
+        }
+
+        .paper-title a {
+            color: #667eea;
+            text-decoration: none;
+        }
+
+        .paper-title a:hover {
+            text-decoration: underline;
+        }
+
+        .paper-authors {
+            color: #666;
+            font-size: 0.95em;
+            margin-bottom: 10px;
+        }
+
+        .paper-abstract {
+            color: #555;
+            line-height: 1.6;
+            margin-bottom: 10px;
+        }
+
+        .paper-meta {
+            display: flex;
+            gap: 15px;
+            font-size: 0.85em;
+            color: #888;
+        }
+
+        .error-message {
+            background: #fee;
+            color: #c33;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #c33;
+        }
+
+        .no-results {
+            text-align: center;
+            color: #666;
+            padding: 40px;
+            font-style: italic;
+        }
+
+        .footer {
+            text-align: center;
+            color: white;
+            opacity: 0.8;
+            margin-top: 40px;
+            padding: 20px;
+        }
+
+        .footer a {
+            color: white;
+            text-decoration: underline;
+        }
+
+        @media (max-width: 768px) {
+            header h1 {
+                font-size: 1.8em;
+            }
+
+            .search-box {
+                flex-direction: column;
+            }
+
+            #searchButton {
+                width: 100%;
+            }
+
+            .search-container {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔬 Research Literature Search</h1>
+            <p>Search arXiv, IEEE Xplore, and Zenodo simultaneously</p>
+        </header>
+
+        <div class="search-container">
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="Enter search terms (e.g., 'optical computing ternary logic')" autofocus>
+                <button id="searchButton" onclick="performSearch()">Search</button>
+            </div>
+
+            <div class="sources">
+                <label class="source-badge">
+                    <input type="checkbox" id="arxivCheck" checked>
+                    <span>arXiv</span>
+                </label>
+                <label class="source-badge">
+                    <input type="checkbox" id="ieeeCheck" checked>
+                    <span>IEEE Xplore</span>
+                </label>
+                <label class="source-badge">
+                    <input type="checkbox" id="zenodoCheck" checked>
+                    <span>Zenodo</span>
+                </label>
+            </div>
+        </div>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Searching across multiple databases...</p>
+            <p style="font-size: 0.9em; color: #666; margin-top: 10px;">This may take a few seconds</p>
+        </div>
+
+        <div class="results" id="results">
+            <!-- Results will be inserted here -->
+        </div>
+
+        <footer class="footer">
+            <p>Part of the <a href="https://github.com/jackwayne234/-wavelength-ternary-optical-computer" target="_blank">Wavelength-Division Ternary Optical Computer</a> project</p>
+            <p style="margin-top: 10px; font-size: 0.9em;">Free and open source research tool</p>
+        </footer>
+    </div>
+
+    <script>
+        // Allow Enter key to trigger search
+        document.getElementById('searchInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                performSearch();
+            }
+        });
+
+        async function performSearch() {
+            const query = document.getElementById('searchInput').value.trim();
+            
+            if (!query) {
+                alert('Please enter a search query');
+                return;
+            }
+
+            // Show loading, hide results
+            document.getElementById('loading').classList.add('active');
+            document.getElementById('results').classList.remove('active');
+            document.getElementById('searchButton').disabled = true;
+
+            try {
+                const response = await fetch('/search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: `query=${encodeURIComponent(query)}`
+                });
+
+                const data = await response.json();
+                displayResults(data);
+            } catch (error) {
+                console.error('Search error:', error);
+                document.getElementById('results').innerHTML = `
+                    <div class="results-header">
+                        <div class="error-message">
+                            <strong>Error:</strong> Failed to perform search. Please try again later.
+                            <br><br>
+                            Details: ${error.message}
+                        </div>
+                    </div>
+                `;
+                document.getElementById('results').classList.add('active');
+            } finally {
+                document.getElementById('loading').classList.remove('active');
+                document.getElementById('searchButton').disabled = false;
+            }
+        }
+
+        function displayResults(data) {
+            const resultsDiv = document.getElementById('results');
+            
+            let html = `
+                <div class="results-header">
+                    <h2>Search Results for "${escapeHtml(data.query)}"</h2>
+                    <div class="stats">
+                        <span>📄 ${data.total} total results</span>
+                        <span>🔬 arXiv: ${data.arxiv.length}</span>
+                        <span>⚡ IEEE: ${data.ieee.length}</span>
+                        <span>📦 Zenodo: ${data.zenodo.length}</span>
+                    </div>
+                </div>
+            `;
+
+            // arXiv Results
+            if (document.getElementById('arxivCheck').checked) {
+                html += '<div class="source-section">';
+                html += '<div class="source-title">📚 arXiv</div>';
+                if (data.arxiv.length === 0 || data.arxiv[0].error) {
+                    html += `<div class="no-results">${data.arxiv[0]?.error || 'No results found'}</div>`;
+                } else {
+                    data.arxiv.forEach(paper => {
+                        html += renderPaper(paper, 'arXiv');
+                    });
+                }
+                html += '</div>';
+            }
+
+            // IEEE Results
+            if (document.getElementById('ieeeCheck').checked) {
+                html += '<div class="source-section">';
+                html += '<div class="source-title">⚡ IEEE Xplore</div>';
+                if (data.ieee.length === 0 || data.ieee[0].error) {
+                    html += `<div class="no-results">${data.ieee[0]?.error || 'No results found'}</div>`;
+                } else {
+                    data.ieee.forEach(paper => {
+                        html += renderPaper(paper, 'IEEE');
+                    });
+                }
+                html += '</div>';
+            }
+
+            // Zenodo Results
+            if (document.getElementById('zenodoCheck').checked) {
+                html += '<div class="source-section">';
+                html += '<div class="source-title">📦 Zenodo</div>';
+                if (data.zenodo.length === 0 || data.zenodo[0].error) {
+                    html += `<div class="no-results">${data.zenodo[0]?.error || 'No results found'}</div>`;
+                } else {
+                    data.zenodo.forEach(paper => {
+                        html += renderPaper(paper, 'Zenodo');
+                    });
+                }
+                html += '</div>';
+            }
+
+            resultsDiv.innerHTML = html;
+            resultsDiv.classList.add('active');
+        }
+
+        function renderPaper(paper, source) {
+            const authors = paper.authors ? paper.authors.slice(0, 3).join(', ') + (paper.authors.length > 3 ? ' et al.' : '') : 'Unknown authors';
+            
+            return `
+                <div class="paper">
+                    <div class="paper-title">
+                        <a href="${escapeHtml(paper.url)}" target="_blank">${escapeHtml(paper.title)}</a>
+                    </div>
+                    <div class="paper-authors">👤 ${escapeHtml(authors)}</div>
+                    <div class="paper-abstract">${escapeHtml(paper.summary || paper.abstract || 'No abstract available')}</div>
+                    <div class="paper-meta">
+                        <span>📅 ${escapeHtml(paper.published || 'Unknown date')}</span>
+                        <span>🏷️ ${source}</span>
+                        ${paper.doi ? `<span>🔗 DOI: ${escapeHtml(paper.doi)}</span>` : ''}
+                    </div>
+                </div>
+            `;
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>
