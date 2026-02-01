@@ -1,6 +1,9 @@
 /*
  * Wavelength-Division Ternary Logic Controller (Prototype v1)
  * -----------------------------------------------------------
+ * Copyright (c) 2026 Christopher Riner
+ * Licensed under the MIT License. See LICENSE file for details.
+ *
  * Target: ESP32 DevKit V1
  * Sensors: Adafruit AS7341 (Spectral Sensor)
  * Actuators: 6x Laser Diodes via ULN2803 Driver
@@ -12,6 +15,10 @@
  * Input A: Red=12, Grn=13, Blu=14
  * Input B: Red=25, Grn=26, Blu=27
  * I2C: SDA=21, SCL=22
+ *
+ * Part of the Wavelength-Division Ternary Optical Computer project:
+ * https://github.com/jackwayne234/-wavelength-ternary-optical-computer
+ * Research paper: DOI 10.5281/zenodo.18437600
  */
 
 #include <Wire.h>

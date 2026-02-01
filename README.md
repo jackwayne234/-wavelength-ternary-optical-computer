@@ -1,8 +1,12 @@
 # Wavelength-Division Ternary Optical Computer
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18437600.svg)](https://doi.org/10.5281/zenodo.18437600)
-[![License: CC BY 4.0](https://img.shields.io/badge/License-CC%20BY%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by/4.0/)
+[![License: Code - MIT](https://img.shields.io/badge/License-Code%20MIT-blue.svg)](LICENSE)
+[![License: Docs - CC BY 4.0](https://img.shields.io/badge/License-Docs%20CC%20BY%204.0-lightgrey.svg)](LICENSE-CC-BY-4.0)
+[![License: Hardware - CERN OHL](https://img.shields.io/badge/License-Hardware%20CERN%20OHL-orange.svg)](LICENSE-CERN-OHL)
 [![Status: Active](https://img.shields.io/badge/Status-Active%20Development-green.svg)]()
+[![Open Source](https://img.shields.io/badge/Open%20Source-Yes-brightgreen.svg)]()
+[![Contributions Welcome](https://img.shields.io/badge/Contributions-Welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 > **Bypassing the Radix Economy Penalty in Optical Computing**
 
@@ -95,6 +99,26 @@ python3 sfg_mixer.py           # Sum-frequency generation mixer
 python3 test_photonic_logic.py # Logic verification
 ```
 
+## 📚 Documentation
+
+### For Builders
+- **[Build Logs](docs/build_logs/)** - Day-by-day construction progress
+- **[Test Results](docs/test_results/)** - Formal verification and benchmarks
+- **[Lessons Learned](docs/lessons_learned/)** - What worked and what didn't
+- **[Quick Reference](docs/QUICK_REFERENCE.md)** - How to document your build
+
+### For Planners
+- **[SMEAC Plans](Phase2_Fiber_Benchtop/admin_logistics/presentation/)** - Mission planning and presentations
+- **[Decision Records](docs/decisions/)** - Why we made key design choices
+- **[BOM & Assembly](Phase1_Prototype/hardware/)** - Parts lists and instructions
+
+### Documentation System
+We use a **hybrid approach**:
+- **SMEAC** for planning phases and presenting to stakeholders
+- **Engineering Logs** for day-to-day build documentation
+
+See [`docs/README.md`](docs/README.md) for templates and guidelines.
+
 ### Phase 2 Fiber Benchtop
 ```bash
 python3 Phase2_Fiber_Benchtop/firmware/sfp_tuner.py
@@ -139,11 +163,47 @@ If you use this work, please cite:
 }
 ```
 
-## 📄 License
+## 📄 Open Source Licensing
 
-- **Paper & Documentation**: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
-- **Code**: MIT License (see individual files)
-- **Hardware Designs**: CERN Open Hardware License
+This project is fully open source with explicit licensing for all components:
+
+| Component | License | File |
+|-----------|---------|------|
+| **Software Code** | MIT License | [LICENSE](LICENSE) |
+| **Documentation & Papers** | CC BY 4.0 | [LICENSE-CC-BY-4.0](LICENSE-CC-BY-4.0) |
+| **Hardware Designs** | CERN OHL | [LICENSE-CERN-OHL](LICENSE-CERN-OHL) |
+
+All source files include license headers. See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for community standards.
+
+### Why Multiple Licenses?
+
+Different components require different legal frameworks:
+- **MIT** for code: Permissive, allows commercial use, requires attribution
+- **CC BY 4.0** for docs: Academic standard, ensures proper citation
+- **CERN OHL** for hardware: Specifically designed for open hardware, ensures designs remain open
+
+### Your Rights
+
+You are free to:
+- ✅ Use this research for any purpose (commercial or academic)
+- ✅ Modify and build upon this work
+- ✅ Distribute copies and derivatives
+- ✅ Study and learn from the designs
+
+Requirements:
+- 📋 Provide attribution to the original author
+- 📋 Share modifications under the same license
+- 📋 Include license text with distributions
+
+### Contributing
+
+We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for details on:
+- Hardware improvements and builds
+- Software optimizations
+- Documentation and translations
+- Research collaboration
+
+All contributors retain copyright to their contributions while granting the project open source rights.
 
 ## 🙏 Acknowledgments
 
@@ -154,7 +214,7 @@ If you use this work, please cite:
 ---
 
 **Author**: Christopher Riner  
-**Contact**: chrisriner@gmail.com  
+**Contact**: chrisriner45@gmail.com  
 **Location**: Chesapeake, VA, USA  
 **Status**: Active duty Navy, retiring soon to build optical computers full-time
 

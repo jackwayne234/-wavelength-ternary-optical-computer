@@ -1,4 +1,13 @@
 /*
+ * Copyright (c) 2026 Christopher Riner
+ * Licensed under the MIT License. See LICENSE file for details.
+ *
+ * Part of the Wavelength-Division Ternary Optical Computer project:
+ * https://github.com/jackwayne234/-wavelength-ternary-optical-computer
+ * Research paper: DOI 10.5281/zenodo.18437600
+ */
+
+/*
  * TERNARY OPTICAL COMPUTER - CONTROLLER FIRMWARE
  * Platform: ESP32 DevKit V1
  * Sensor: Adafruit AS7341 (I2C)

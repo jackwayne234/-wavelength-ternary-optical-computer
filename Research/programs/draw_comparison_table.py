@@ -1,3 +1,14 @@
+# Copyright (c) 2026 Christopher Riner
+# Licensed under the MIT License. See LICENSE file for details.
+#
+# Wavelength-Division Ternary Optical Computer
+# https://github.com/jackwayne234/-wavelength-ternary-optical-computer
+#
+# This file is part of an open source research project to develop a
+# ternary optical computer using wavelength-division multiplexing.
+# The research is documented in the paper published on Zenodo:
+# DOI: 10.5281/zenodo.18437600
+
 import matplotlib.pyplot as plt
 
 def draw_comparison_table():

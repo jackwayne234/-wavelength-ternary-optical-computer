@@ -1,0 +1,161 @@
+CERN Open Hardware Licence Version 2 - Strongly Reciprocal
+
+Preamble
+
+CERN has developed this licence to promote collaboration among hardware
+designers and to provide a legal tool which supports the freedom to use,
+study, modify, share and distribute hardware designs and products based on
+those designs. The CERN Open Hardware Licence (OHL) is a tool to support
+collaboration and knowledge sharing in the hardware design community.
+
+The CERN-OHL is to hardware what the General Public Licence (GPL) is to
+software. It is intended to guarantee that you have the freedom to use,
+study, modify, share and distribute hardware designs and products, and
+that you must share your modifications under the same licence.
+
+1 Definitions
+
+1.1 'Licence' means this CERN Open Hardware Licence, being Version 2 or a
+subsequent version published by CERN.
+
+1.2 'Compatible Licence' means any licence approved by CERN as compatible
+with this Licence.
+
+1.3 'Source' means all the information necessary to make, modify or
+reconstruct a Product, including but not limited to:
+(a) hardware design files such as HDL source code, schematic diagrams,
+    PCB layout files, mechanical CAD files and manufacturing files;
+(b) documentation describing the design, its operation or manufacture;
+(c) test benches, test vectors and validation reports;
+(d) software which is embedded in the hardware;
+(e) any other information that the Licensor considers necessary.
+
+1.4 'Product' means any device, equipment or other tangible object whose
+design is licensed under this Licence.
+
+1.5 'You' means any natural or legal person exercising rights under this
+Licence.
+
+1.6 'Licensor' means any natural or legal person that creates or
+contributes to the creation of a Source and distributes it under this
+Licence.
+
+1.7 'Contribution' means any work of authorship, including the original
+version of the Source and any modifications or additions to that Source
+or to previous Contributions, which is intentionally submitted to the
+Licensor for inclusion in the Source by the copyright owner or by an
+individual or Legal Entity authorized to submit on behalf of the copyright
+owner.
+
+1.8 'CERN' means the European Organization for Nuclear Research.
+
+2 Grant of Licence
+
+2.1 Copyright Licence
+
+The Licensor grants You a perpetual, worldwide, non-exclusive, no-charge,
+royalty-free, irrevocable copyright licence to use, reproduce, modify,
+distribute, perform, display, and otherwise exploit the Source, and to
+sublicense these rights to others, under the terms of this Licence.
+
+2.2 Patent Licence
+
+Each Contributor hereby grants You a perpetual, worldwide, non-exclusive,
+no-charge, royalty-free, irrevocable patent licence to make, have made,
+use, offer to sell, sell, import, and otherwise transfer the Product,
+where such licence applies only to those patent claims licensable by such
+Contributor that are necessarily infringed by their Contribution(s) alone
+or by combination of their Contribution(s) with the Source to which such
+Contribution(s) was submitted.
+
+3 Distribution of Source
+
+3.1 You may distribute copies of the Source in any medium, provided that
+You:
+(a) keep intact all copyright and licence notices;
+(b) provide a copy of this Licence with the Source;
+(c) clearly mark any modifications You make to the Source;
+(d) provide the Source in a form that is convenient for modification
+    and manufacture.
+
+3.2 You may distribute copies of modified versions of the Source under
+the terms of Section 3.1, provided that You:
+(a) clearly mark the modifications You have made;
+(b) license the modifications under this Licence or a Compatible Licence;
+(c) provide the date of the modifications;
+(d) make available the corresponding Source of the modifications.
+
+4 Distribution of Products
+
+4.1 You may manufacture and distribute Products based on the Source or
+modified versions thereof, provided that You:
+(a) accompany each Product with a copy of this Licence or a Compatible
+    Licence;
+(b) make available the corresponding Source of the Product;
+(c) clearly mark any modifications You have made to the Product;
+(d) provide the date of the modifications.
+
+4.2 The Source corresponding to a Product must be available for as long
+as You distribute the Product.
+
+5 Notices
+
+5.1 You must retain all copyright, patent, trademark, and attribution
+notices from the Source.
+
+5.2 If You distribute modified versions of the Source or Products based
+thereon, You must include a prominent notice stating that You have
+modified the Source or Product.
+
+5.3 You may not use the names, trademarks, service marks, or logos of the
+Licensor to endorse or promote products derived from this Source without
+specific prior written permission.
+
+6 Warranty and Liability
+
+6.1 THE SOURCE AND PRODUCTS ARE PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOURCE
+OR PRODUCTS OR THE USE OR OTHER DEALINGS IN THE SOURCE OR PRODUCTS.
+
+7 Termination
+
+7.1 This Licence and the rights granted hereunder will terminate
+automatically upon any breach by You of the terms of this Licence.
+
+7.2 If You institute patent litigation against anyone alleging that the
+Source or a Contribution constitutes direct or contributory patent
+infringement, then any patent licences granted to You under this Licence
+for that Source shall terminate as of the date such litigation is filed.
+
+8 Miscellaneous
+
+8.1 This Licence does not grant permission to use the trade names,
+trademarks, service marks, or product names of the Licensor.
+
+8.2 If any provision of this Licence is held to be unenforceable, such
+provision shall be reformed only to the extent necessary to make it
+enforceable.
+
+8.3 No term of this Licence shall be deemed waived and no breach
+consented to unless such waiver or consent is in writing.
+
+8.4 This Licence constitutes the entire agreement between the parties
+with respect to the Source licensed here.
+
+---
+
+This license applies to all hardware designs in this repository, including
+but not limited to:
+- 3D printed parts (SCAD files, STL files)
+- PCB designs and layouts
+- Mechanical designs and CAD files
+- Assembly instructions and manufacturing documentation
+- Bill of Materials (BOM)
+- Optical component specifications and mounting designs
+
+For software code, see LICENSE.
+For documentation and research papers, see LICENSE-CC-BY-4.0.
