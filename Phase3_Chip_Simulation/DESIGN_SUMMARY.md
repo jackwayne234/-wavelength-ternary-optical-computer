@@ -1,7 +1,8 @@
 # Design Summary: 81-Trit Ternary Optical Processor
 
 *Prepared for foundry submission*
-*Version 1.0 | February 2026*
+*Version 1.1 | February 2, 2026*
+*Updated: Optimized wavelengths verified by simulation*
 
 ---
 
@@ -18,13 +19,32 @@ This document describes a photonic integrated circuit implementing an 81-trit te
 
 ## Architecture
 
-### Ternary encoding scheme
+### Ternary encoding scheme (INPUT wavelengths)
 
 | Logic value | Wavelength | Color | Telecom band |
 |-------------|------------|-------|--------------|
-| -1 | 1.55 μm | Red | C-band |
-| 0 | 1.30 μm | Green | O-band |
-| +1 | 1.00 μm | Blue | — |
+| -1 | 1.550 μm | Red | C-band |
+| 0 | 1.216 μm | Green | O-band adjacent |
+| +1 | 1.000 μm | Blue | Near-IR |
+
+**Key optimization:** Green wavelength (1.216 μm) is chosen as the *harmonic mean* of Red and Blue:
+```
+λ_Green = 2 × λ_Red × λ_Blue / (λ_Red + λ_Blue) = 1.216 μm
+```
+
+This ensures that R+B (=-1+1=0) and G+G (=0+0=0) produce the **same SFG output wavelength** (0.608 μm), enabling clean 3-detector readout.
+
+### SFG Output wavelengths (DETECTOR wavelengths)
+
+| Detector | Wavelength | Result | Source combinations |
+|----------|------------|--------|---------------------|
+| DET_-1 | 0.681 μm | -1 | R+G |
+| DET_0 | 0.608 μm | 0 | R+B or G+G |
+| DET_+1 | 0.549 μm | +1 | G+B |
+| (overflow) | 0.775 μm | -2 | R+R |
+| (overflow) | 0.500 μm | +2 | B+B |
+
+*All output wavelengths verified by Meep FDTD simulation (February 2, 2026)*
 
 ### Hierarchical organization
 
@@ -42,10 +62,14 @@ Physical layout: 3×3 grid of 9-trit processing elements.
 
 | Component | Function | Quantity per ALU |
 |-----------|----------|------------------|
-| Ring resonator | Wavelength selection | 6 (3 per operand) |
-| MMI coupler | Wavelength combining/splitting | 4 |
+| AWG demux | Wavelength separation (R/G/B) | 2 (one per operand) |
+| Ring resonator | Wavelength selection/gating | 6 (3 per operand) |
+| Wavelength combiner | Merge selected wavelengths | 2 (one per operand) |
+| MMI 2×2 | Combine A and B operands | 1 |
 | SFG mixer | Ternary arithmetic (χ² nonlinear) | 1 |
-| Photodetector | Output readout | 1 |
+| Output splitter | Split to 3 detector paths | 1 |
+| Ring filter | Wavelength-selective detection | 3 (one per result) |
+| Photodetector | Output readout | 3 (DET_-1, DET_0, DET_+1) |
 
 ---
 
@@ -56,10 +80,11 @@ Physical layout: 3×3 grid of 9-trit processing elements.
 | Parameter | Value | Notes |
 |-----------|-------|-------|
 | Core width | 0.5 μm | Single-mode at all wavelengths |
-| Core index | 2.2 | LiNbO3 or SiN |
-| Cladding index | 1.0 | Air or SiO2 |
-| Minimum bend radius | 5 μm | Ring resonators |
-| Coupling gap | 0.2 μm | Ring-to-bus coupling |
+| Core index | 2.2 | LiNbO3 |
+| Cladding index | 1.0 | Air cladding |
+| Minimum bend radius | 5 μm | Ring resonators (PDK minimum) |
+| Coupling gap | 0.15 μm | Ring-to-bus coupling (simulation verified) |
+| Mixer width | 0.8 μm | Wider for phase matching |
 
 ### Nonlinear mixer
 
@@ -103,24 +128,25 @@ Physical layout: 3×3 grid of 9-trit processing elements.
 | input_a | Left edge, upper | Operand A (multi-wavelength) |
 | input_b | Left edge, lower | Operand B (multi-wavelength) |
 
-### Electrical outputs (active low/high)
+### Electrical outputs (SFG detection)
 
-| Signal | Function |
-|--------|----------|
-| V_red | Red (1.55 μm) detected at output |
-| V_green | Green (1.30 μm) detected at output |
-| V_blue | Blue (1.00 μm) detected at output |
+The output stage detects the **SFG output wavelengths** (not input wavelengths). Each detector is tuned via ring resonator filter to its target wavelength:
 
-The output stage splits the mixer result to three wavelength-filtered photodetectors. Firmware reads all three simultaneously to determine which colors are present:
+| Signal | Wavelength | Ternary Result |
+|--------|------------|----------------|
+| DET_-1 | 0.681 μm | -1 |
+| DET_0 | 0.608 μm | 0 |
+| DET_+1 | 0.549 μm | +1 |
 
-| Detected | Meaning |
-|----------|---------|
-| Red only | -1 (or -2 with carry) |
-| Green only | 0 |
-| Blue only | +1 (or +2 with carry) |
-| Red + Blue | 0 (cancellation: -1 + 1) |
-| Red + Green | -1 |
-| Green + Blue | +1 |
+**Detection logic:** Exactly one detector fires for each valid result. Firmware reads all three to determine the ternary output:
+
+| DET_-1 | DET_0 | DET_+1 | Result |
+|--------|-------|--------|--------|
+| HIGH | low | low | -1 |
+| low | HIGH | low | 0 |
+| low | low | HIGH | +1 |
+
+*Note: Overflow results (±2) produce wavelengths outside the primary detector range and require separate handling (carry logic).*
 
 ### Fiber coupling requirements
 
@@ -140,10 +166,10 @@ The output stage splits the mixer result to three wavelength-filtered photodetec
 
 ### Equipment required
 
-- Tunable laser sources (1.0, 1.3, 1.55 μm)
-- Optical spectrum analyzer
+- Tunable laser sources (1.000, 1.216, 1.550 μm)
+- Optical spectrum analyzer (0.5-1.6 μm range)
 - Fiber alignment stage
-- Photodetector/power meter
+- Si photodetectors (for 0.5-0.8 μm SFG outputs)
 
 ### Verification tests
 
@@ -151,19 +177,48 @@ The output stage splits the mixer result to three wavelength-filtered photodetec
 |------|-------|-----------------|---------------|
 | Waveguide transmission | 1.55 μm CW | Transmitted signal | Loss < 3 dB/cm |
 | Ring resonator | Broadband | Filtered wavelength | Extinction > 10 dB |
-| SFG mixing | 1.55 + 1.00 μm | Signal at 0.61 μm | Detectable peak |
-| Ternary addition | Red + Blue | Green (0) | Correct wavelength |
+| SFG mixing (R+B) | 1.550 + 1.000 μm | Signal at 0.608 μm | Detectable peak |
+| SFG mixing (G+G) | 1.216 + 1.216 μm | Signal at 0.608 μm | Same as R+B (±1 nm) |
+| Ternary addition | Red + Blue | DET_0 fires | Correct detector |
 
-### Truth table verification (single trit)
+### Truth table verification (single trit) - SIMULATION VERIFIED
 
-| A | B | A + B | Output wavelength |
-|---|---|-------|-------------------|
-| -1 | -1 | -2 (carry) | Red + carry |
-| -1 | 0 | -1 | Red (1.55 μm) |
-| -1 | +1 | 0 | Green (1.30 μm) |
-| 0 | 0 | 0 | Green (1.30 μm) |
-| +1 | -1 | 0 | Green (1.30 μm) |
-| +1 | +1 | +2 (carry) | Blue + carry |
+| A | B | A + B | SFG Output λ | Detector |
+|---|---|-------|--------------|----------|
+| -1 (R) | -1 (R) | -2 | 0.775 μm | overflow |
+| -1 (R) | 0 (G) | -1 | 0.681 μm | DET_-1 |
+| -1 (R) | +1 (B) | 0 | **0.608 μm** | DET_0 |
+| 0 (G) | 0 (G) | 0 | **0.608 μm** | DET_0 |
+| 0 (G) | +1 (B) | +1 | 0.549 μm | DET_+1 |
+| +1 (B) | +1 (B) | +2 | 0.500 μm | overflow |
+
+*Critical verification: R+B and G+G both produce 0.608 μm (verified within 0.2 nm by Meep FDTD)*
+
+---
+
+## Chip layout
+
+### Centered frontend architecture
+
+The optical frontend (Kerr clock, Y-junction, splitter trees) is positioned at the **chip center** to minimize signal degradation:
+
+```
+                    ┌─────────────────────────────────────┐
+                    │  Zone 6    Zone 7    Zone 8        │
+                    │  (9 ALUs)  (9 ALUs)  (9 ALUs)      │
+                    ├─────────────────────────────────────┤
+                    │  Zone 3   [FRONTEND]  Zone 5       │
+                    │  (9 ALUs)  Kerr+Y    (9 ALUs)      │
+                    ├─────────────────────────────────────┤
+                    │  Zone 0    Zone 1    Zone 2        │
+                    │  (9 ALUs)  (9 ALUs)  (9 ALUs)      │
+                    └─────────────────────────────────────┘
+```
+
+**Benefits:**
+- Maximum path length reduced by ~50%
+- Equal signal power to all ALUs
+- Symmetric splitter tree distribution
 
 ---
 
@@ -171,10 +226,21 @@ The output stage splits the mixer result to three wavelength-filtered photodetec
 
 | File | Description |
 |------|-------------|
-| `ternary_81trit_optimal.gds` | Complete chip layout |
-| `81_trit_architecture.txt` | Detailed architecture rationale |
+| `ternary_81trit_full.gds` | Complete chip layout (centered frontend) |
+| `ternary_complete_alu.gds` | Single ALU reference design |
 | `METHODS.md` | Simulation methodology |
-| `SIMULATION_RESULTS.md` | Material characterization data |
+| `../Research/data/SIMULATION_RESULTS.md` | Material characterization data |
+
+### Simulation verification files
+
+| File | Contents |
+|------|----------|
+| `mixer_data_RED_RED.csv` | R+R → 0.775 μm verified |
+| `mixer_data_RED_GREEN.csv` | R+G → 0.681 μm verified |
+| `mixer_data_RED_BLUE.csv` | R+B → 0.608 μm verified |
+| `mixer_data_GREEN_GREEN.csv` | G+G → 0.608 μm verified |
+| `mixer_data_GREEN_BLUE.csv` | G+B → 0.549 μm verified |
+| `mixer_data_BLUE_BLUE.csv` | B+B → 0.500 μm verified |
 
 ---
 
