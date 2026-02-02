@@ -290,6 +290,179 @@ def photodetector(
     return c
 
 
+def kerr_resonator(
+    radius: float = 10.0,
+    gap: float = 0.15,
+    name: str = "kerr_clock"
+) -> gf.Component:
+    """
+    Creates a Kerr resonator for optical clock/timing synchronization.
+
+    The Kerr effect (third-order nonlinearity) creates self-phase modulation,
+    enabling optical timing synchronization without electronics.
+
+    Args:
+        radius: Ring radius (larger = higher Q, sharper timing)
+        gap: Coupling gap
+        name: Component name
+    """
+    c = gf.Component(name)
+
+    # Ring resonator with Kerr nonlinearity marker
+    ring = c << gf.components.ring_single(radius=radius, gap=gap)
+
+    # Visual marker for Kerr region (layer 5)
+    c.add_polygon(
+        [(- radius - 1, -1), (radius + 1, -1), (radius + 1, 1), (-radius - 1, 1)],
+        layer=(5, 0)
+    )
+
+    c.add_label("CLK", position=(0, radius + 3), layer=LABEL_LAYER)
+
+    c.add_port(name="input", port=ring.ports["o1"])
+    c.add_port(name="output", port=ring.ports["o2"])
+
+    return c
+
+
+def y_junction(
+    name: str = "y_split"
+) -> gf.Component:
+    """
+    Creates a Y-junction beam splitter.
+
+    Splits input beam into two equal-power outputs for A and B operand paths.
+    Uses MMI-based 1x2 splitter for broadband operation.
+    """
+    c = gf.Component(name)
+
+    # 1x2 MMI splitter
+    mmi = c << gf.components.mmi1x2()
+
+    c.add_label("Y", position=(0, 5), layer=LABEL_LAYER)
+
+    c.add_port(name="input", port=mmi.ports["o1"])
+    c.add_port(name="out_a", port=mmi.ports["o2"])
+    c.add_port(name="out_b", port=mmi.ports["o3"])
+
+    return c
+
+
+def awg_demux(
+    n_channels: int = 3,
+    name: str = "awg"
+) -> gf.Component:
+    """
+    Creates an Arrayed Waveguide Grating (AWG) demultiplexer.
+
+    Separates input wavelengths into separate output channels.
+    For ternary: separates R (1.55um), G (1.30um), B (1.00um).
+
+    Args:
+        n_channels: Number of output wavelength channels
+        name: Component name
+    """
+    c = gf.Component(name)
+
+    # AWG representation using star coupler + waveguide array + star coupler
+    # Simplified as cascaded MMIs for layout purposes
+
+    # Input star coupler (1 to N)
+    input_mmi = c << gf.components.mmi1x2()
+    input_mmi.dmove((0, 0))
+
+    # Second stage split
+    mmi2 = c << gf.components.mmi1x2()
+    mmi2.dmove((30, -10))
+
+    # Route
+    route_single(c, cross_section=XS, port1=input_mmi.ports["o3"], port2=mmi2.ports["o1"])
+
+    # AWG body marker (layer 6)
+    c.add_polygon(
+        [(10, -25), (50, -25), (50, 15), (10, 15)],
+        layer=(6, 0)
+    )
+
+    c.add_label("AWG", position=(30, 20), layer=LABEL_LAYER)
+
+    # Ports: 1 input, 3 outputs (R, G, B)
+    c.add_port(name="input", port=input_mmi.ports["o1"])
+    c.add_port(name="out_r", port=input_mmi.ports["o2"])  # Red (1550nm)
+    c.add_port(name="out_g", port=mmi2.ports["o2"])       # Green (1300nm)
+    c.add_port(name="out_b", port=mmi2.ports["o3"])       # Blue (1000nm)
+
+    return c
+
+
+def optical_frontend(
+    name: str = "frontend",
+    uid: str = ""
+) -> gf.Component:
+    """
+    Creates the complete optical frontend/input conditioning stage.
+
+    Structure:
+      CW Laser Input -> Kerr Resonator (clock) -> Y-Junction (split A/B)
+                                                      |
+                                          +-----------+-----------+
+                                          |                       |
+                                        AWG_A                   AWG_B
+                                       (demux)                 (demux)
+                                          |                       |
+                                    R_A, G_A, B_A           R_B, G_B, B_B
+
+    Returns component with ports for laser input and 6 wavelength outputs
+    (3 for operand A, 3 for operand B).
+    """
+    import uuid
+    if not uid:
+        uid = str(uuid.uuid4())[:8]
+
+    c = gf.Component(name)
+
+    # 1. Kerr resonator for timing
+    clk = c << kerr_resonator(name=f"clk_{uid}")
+    clk.dmove((0, 0))
+
+    # 2. Y-junction to split to A and B paths
+    ysplit = c << y_junction(name=f"ysplit_{uid}")
+    ysplit.dmove((40, 0))
+
+    route_single(c, cross_section=XS, port1=clk.ports["output"], port2=ysplit.ports["input"])
+
+    # 3. AWG for operand A (upper path)
+    awg_a = c << awg_demux(name=f"awg_a_{uid}")
+    awg_a.dmove((80, 30))
+
+    route_single(c, cross_section=XS, port1=ysplit.ports["out_a"], port2=awg_a.ports["input"])
+
+    # 4. AWG for operand B (lower path)
+    awg_b = c << awg_demux(name=f"awg_b_{uid}")
+    awg_b.dmove((80, -30))
+
+    route_single(c, cross_section=XS, port1=ysplit.ports["out_b"], port2=awg_b.ports["input"])
+
+    # Labels
+    c.add_label("FRONTEND", position=(60, 60), layer=LABEL_LAYER)
+    c.add_label("CW_IN", position=(-15, 0), layer=LABEL_LAYER)
+
+    # Ports
+    c.add_port(name="laser_in", port=clk.ports["input"])
+
+    # Operand A outputs
+    c.add_port(name="a_red", port=awg_a.ports["out_r"])
+    c.add_port(name="a_green", port=awg_a.ports["out_g"])
+    c.add_port(name="a_blue", port=awg_a.ports["out_b"])
+
+    # Operand B outputs
+    c.add_port(name="b_red", port=awg_b.ports["out_r"])
+    c.add_port(name="b_green", port=awg_b.ports["out_g"])
+    c.add_port(name="b_blue", port=awg_b.ports["out_b"])
+
+    return c
+
+
 def ternary_output_stage(
     name: str = "output_stage",
     uid: str = ""
@@ -746,7 +919,11 @@ def interactive_generator():
         print("  e. Combiner")
         print("  f. Splitter")
         print("  g. Photodetector")
-        sub = input("Select (a-g): ").strip().lower()
+        print("  h. Kerr Resonator (optical clock)")
+        print("  i. Y-Junction (beam splitter)")
+        print("  j. AWG Demux (wavelength separator)")
+        print("  k. Optical Frontend (complete input stage)")
+        sub = input("Select (a-k): ").strip().lower()
 
         if sub == "a":
             wvl = float(input("Wavelength (μm, e.g., 1.55): "))
@@ -770,6 +947,20 @@ def interactive_generator():
         elif sub == "g":
             chip = photodetector()
             chip_name = "photodetector"
+        elif sub == "h":
+            chip = kerr_resonator()
+            chip_name = "kerr_clock"
+        elif sub == "i":
+            chip = y_junction()
+            chip_name = "y_junction"
+        elif sub == "j":
+            chip = awg_demux()
+            chip_name = "awg_demux"
+        elif sub == "k":
+            print("Generating complete optical frontend...")
+            print("  Kerr resonator (clock) -> Y-junction -> 2x AWG demux")
+            chip = optical_frontend()
+            chip_name = "optical_frontend"
         else:
             print("Invalid selection")
             return
