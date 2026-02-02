@@ -18,6 +18,9 @@ gf.gpdk.PDK.activate()
 # Default cross-section for routing
 XS = gf.cross_section.strip(width=0.5)
 
+# Global setting for label visibility (disable for cleaner layouts)
+SHOW_LABELS = False
+
 # =============================================================================
 # TERNARY ENCODING: Wavelength -> Value
 # =============================================================================
@@ -62,7 +65,8 @@ def wavelength_selector(
     ring = c << gf.components.ring_single(radius=radius, gap=gap)
 
     # Add labels for clarity
-    c.add_label(f"λ={wavelength_um}μm", position=(0, radius + 2))
+    if SHOW_LABELS:
+        c.add_label(f"λ={wavelength_um}μm", position=(0, radius + 2))
 
     # Expose ports
     c.add_port(name="input", port=ring.ports["o1"])
@@ -116,7 +120,8 @@ def wavelength_inverter(
     wg_bot_out = c << gf.components.straight(length=10, width=0.5)
     wg_bot_out.dmove((length - 10, -spacing))
 
-    c.add_label("NEG (λ swap)", position=(15, spacing + 3))
+    if SHOW_LABELS:
+        c.add_label("NEG (λ swap)", position=(15, spacing + 3))
 
     # Ports
     c.add_port(name="input", port=wg_mid.ports["o1"])
@@ -149,7 +154,8 @@ def dfg_divider(
         [(0, -width), (length, -width), (length, -width-0.5), (0, -width-0.5)],
         layer=(4, 0)  # Different layer for DFG marker
     )
-    c.add_label("χ² DFG Divider", position=(length/2, -width - 1))
+    if SHOW_LABELS:
+        c.add_label("χ² DFG Divider", position=(length/2, -width - 1))
 
     c.add_port(name="input", port=wg.ports["o1"])
     c.add_port(name="output", port=wg.ports["o2"])
@@ -183,7 +189,8 @@ def sfg_mixer(
         [(0, -width), (length, -width), (length, -width-0.5), (0, -width-0.5)],
         layer=(2, 0)  # Different layer for χ² region marker
     )
-    c.add_label("χ² SFG Mixer", position=(length/2, -width - 1))
+    if SHOW_LABELS:
+        c.add_label("χ² SFG Mixer", position=(length/2, -width - 1))
 
     c.add_port(name="input", port=wg.ports["o1"])
     c.add_port(name="output", port=wg.ports["o2"])
@@ -280,7 +287,8 @@ def photodetector(
     det = c << gf.components.rectangle(size=(length, width), layer=(3, 0))
     det.dmove((5, -width/2))
 
-    c.add_label("Photodetector", position=(10, -width))
+    if SHOW_LABELS:
+        c.add_label("Photodetector", position=(10, -width))
     c.add_port(name="input", port=taper.ports["o1"])
 
     return c
@@ -347,14 +355,16 @@ def ternary_output_stage(
                     port2=det.ports["input"])
 
         # Label each detector output
-        c.add_label(f"V_{info['color']}", position=(detector_x + 15, (i - 1) * y_spacing))
+        if SHOW_LABELS:
+            c.add_label(f"V_{info['color']}", position=(detector_x + 15, (i - 1) * y_spacing))
 
     # Input port
     c.add_port(name="input", port=splitter.ports["input"])
 
     # Labels
-    c.add_label("Output Stage", position=(50, y_spacing + 10))
-    c.add_label("(3-channel wavelength detector)", position=(50, y_spacing + 5))
+    if SHOW_LABELS:
+        c.add_label("Output Stage", position=(50, y_spacing + 10))
+        c.add_label("(3-channel wavelength detector)", position=(50, y_spacing + 5))
 
     return c
 
@@ -466,10 +476,11 @@ def generate_ternary_alu(
     # =========================
     # 5. LABELS & METADATA
     # =========================
-    c.add_label(f"Ternary ALU - Operations: {', '.join(operations)}", position=(150, 100))
-    c.add_label("Input A (-1, 0, +1)", position=(0, 80))
-    c.add_label("Input B (-1, 0, +1)", position=(0, -80))
-    c.add_label("Result (V_red, V_green, V_blue)", position=(300, 40))
+    if SHOW_LABELS:
+        c.add_label(f"Ternary ALU - Operations: {', '.join(operations)}", position=(150, 100))
+        c.add_label("Input A (-1, 0, +1)", position=(0, 80))
+        c.add_label("Input B (-1, 0, +1)", position=(0, -80))
+        c.add_label("Result (V_red, V_green, V_blue)", position=(300, 40))
 
     # Add input ports
     c.add_port(name="input_a", port=input_a.ports["input"])
@@ -567,7 +578,8 @@ def generate_full_processor(
         )
         alu.dmove((0, i * y_spacing))
 
-    c.add_label(f"{n_trits}-Trit Ternary Processor", position=(150, n_trits * y_spacing + 50))
+    if SHOW_LABELS:
+        c.add_label(f"{n_trits}-Trit Ternary Processor", position=(150, n_trits * y_spacing + 50))
 
     return c
 
@@ -627,13 +639,14 @@ def generate_81_trit_processor(
                     trit_index += 1
 
     # Add hierarchical labels
-    c.add_label("81-TRIT TERNARY PROCESSOR (3^4)", position=(600, -100))
-    c.add_label("128-bit equivalent | 4.4 × 10^38 values", position=(600, -150))
+    if SHOW_LABELS:
+        c.add_label("81-TRIT TERNARY PROCESSOR (3^4)", position=(600, -100))
+        c.add_label("128-bit equivalent | 4.4 × 10^38 values", position=(600, -150))
 
-    # Label the three 27-trit sections
-    for row in range(3):
-        y_label = row * (y_spacing * 9) + y_spacing * 4
-        c.add_label(f"Heptacosa {row} (trits {row*27}-{row*27+26})", position=(-100, y_label))
+        # Label the three 27-trit sections
+        for row in range(3):
+            y_label = row * (y_spacing * 9) + y_spacing * 4
+            c.add_label(f"Heptacosa {row} (trits {row*27}-{row*27+26})", position=(-100, y_label))
 
     return c
 
