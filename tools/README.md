@@ -7,9 +7,9 @@ This directory contains tools and resources to support research on optical compu
 ### 1. Literature Search Tool
 **Multi-database academic search interface**
 
-Searches across arXiv, IEEE Xplore, and Zenodo simultaneously from a single interface.
+Searches across arXiv, Semantic Scholar, and Zenodo simultaneously from a single interface. All three sources are free and open access - no paywalls or API keys required!
 
-- **Live URL:** https://a5ba099c-307b-4236-90cd-b464fc6305f9-00-2vseol98mupvg.riker.replit.dev/
+- **Live URL:** https://research-search-tool.onrender.com
 - **Documentation:** [research_search/README.md](research_search/README.md)
 - **Purpose:** Find papers on optical computing, ternary logic, and related fields
 - **Status:** ✅ Active and running
