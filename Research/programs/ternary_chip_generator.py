@@ -21,6 +21,9 @@ XS = gf.cross_section.strip(width=0.5)
 # Dedicated layer for labels (toggle visibility in KLayout)
 LABEL_LAYER = (100, 0)
 
+# Layer for MZI heaters/electrodes
+HEATER_LAYER = (10, 0)
+
 # =============================================================================
 # TERNARY ENCODING: Wavelength -> Value
 # =============================================================================
@@ -52,6 +55,165 @@ MATERIALS = {
 # =============================================================================
 # COMPONENT LIBRARY: Ternary Photonic Building Blocks
 # =============================================================================
+
+def mzi_switch(
+    arm_length: float = 50.0,
+    arm_spacing: float = 10.0,
+    coupler_length: float = 10.0,
+    heater_length: float = 30.0,
+    heater_width: float = 2.0,
+    name: str = "mzi_switch"
+) -> gf.Component:
+    """
+    Creates a Mach-Zehnder Interferometer (MZI) switch.
+
+    MZI advantages over ring resonators:
+    - Better extinction ratio (>30dB vs ~20dB)
+    - More tolerant to fabrication variations
+    - Broader wavelength bandwidth
+    - Simpler tuning (voltage-based phase control)
+
+    Structure:
+        Input → 3dB Coupler → Upper Arm (with heater) → 3dB Coupler → Bar Output
+                           → Lower Arm              →             → Cross Output
+
+    The control voltage on the heater creates a phase shift via thermo-optic
+    effect, switching light between the bar and cross outputs.
+
+    Args:
+        arm_length: Length of each MZI arm (um)
+        arm_spacing: Vertical spacing between arms (um)
+        coupler_length: Length of 3dB MMI couplers (um)
+        heater_length: Length of heater/electrode region (um)
+        heater_width: Width of heater strip (um)
+        name: Component name
+    """
+    c = gf.Component(name)
+
+    # Input 3dB coupler (MMI-based)
+    coupler_in = c << gf.components.mmi1x2()
+    coupler_in.dmove((0, 0))
+
+    # Upper arm waveguide
+    arm_upper = c << gf.components.straight(length=arm_length, width=0.5)
+    arm_upper.dmove((coupler_length + 5, arm_spacing / 2))
+
+    # Lower arm waveguide
+    arm_lower = c << gf.components.straight(length=arm_length, width=0.5)
+    arm_lower.dmove((coupler_length + 5, -arm_spacing / 2))
+
+    # Route input coupler to arms
+    route_single(c, cross_section=XS, port1=coupler_in.ports["o2"], port2=arm_upper.ports["o1"])
+    route_single(c, cross_section=XS, port1=coupler_in.ports["o3"], port2=arm_lower.ports["o1"])
+
+    # Output 3dB coupler (2x2 MMI for two outputs)
+    coupler_out = c << gf.components.mmi2x2()
+    coupler_out.dmove((coupler_length + arm_length + 15, 0))
+
+    # Route arms to output coupler
+    route_single(c, cross_section=XS, port1=arm_upper.ports["o2"], port2=coupler_out.ports["o1"])
+    route_single(c, cross_section=XS, port1=arm_lower.ports["o2"], port2=coupler_out.ports["o2"])
+
+    # Heater/electrode on upper arm (for thermo-optic phase control)
+    heater_x = coupler_length + 5 + (arm_length - heater_length) / 2
+    heater_y = arm_spacing / 2 + 1.0  # Offset above waveguide
+    c.add_polygon(
+        [
+            (heater_x, heater_y),
+            (heater_x + heater_length, heater_y),
+            (heater_x + heater_length, heater_y + heater_width),
+            (heater_x, heater_y + heater_width)
+        ],
+        layer=HEATER_LAYER
+    )
+
+    # Contact pads for heater
+    pad_size = 5.0
+    # Left pad
+    c.add_polygon(
+        [
+            (heater_x - pad_size, heater_y),
+            (heater_x, heater_y),
+            (heater_x, heater_y + heater_width + pad_size),
+            (heater_x - pad_size, heater_y + heater_width + pad_size)
+        ],
+        layer=HEATER_LAYER
+    )
+    # Right pad
+    c.add_polygon(
+        [
+            (heater_x + heater_length, heater_y),
+            (heater_x + heater_length + pad_size, heater_y),
+            (heater_x + heater_length + pad_size, heater_y + heater_width + pad_size),
+            (heater_x + heater_length, heater_y + heater_width + pad_size)
+        ],
+        layer=HEATER_LAYER
+    )
+
+    # Labels
+    c.add_label("MZI", position=(coupler_length + arm_length / 2, arm_spacing + 5), layer=LABEL_LAYER)
+    c.add_label("HTR", position=(heater_x + heater_length / 2, heater_y + heater_width + 2), layer=LABEL_LAYER)
+
+    # Ports
+    c.add_port(name="input", port=coupler_in.ports["o1"])
+    c.add_port(name="bar", port=coupler_out.ports["o3"])    # Straight-through when heater OFF
+    c.add_port(name="cross", port=coupler_out.ports["o4"])  # Cross output when heater ON
+    # Alias for compatibility
+    c.add_port(name="output", port=coupler_out.ports["o3"])
+
+    return c
+
+
+def wavelength_selector_mzi(
+    wavelength_um: float,
+    arm_length: float = 50.0,
+    arm_spacing: float = 10.0,
+    name: str = "selector_mzi"
+) -> gf.Component:
+    """
+    Creates an MZI-based wavelength selector (gating switch).
+
+    Unlike ring resonators which filter by wavelength, MZI switches gate
+    light on/off. For wavelength selection, use with an upstream AWG demux
+    that separates wavelengths, then MZI switches gate each channel.
+
+    MZI advantages over ring resonators:
+    - Better extinction ratio (>30dB vs ~20dB for rings)
+    - More tolerant to fabrication variations (no critical gap)
+    - Broader wavelength bandwidth (works across entire channel)
+    - Simpler tuning (just voltage, no resonance tracking)
+
+    Args:
+        wavelength_um: Target wavelength (for labeling/documentation)
+        arm_length: MZI arm length (um)
+        arm_spacing: Spacing between MZI arms (um)
+        name: Component name
+
+    Note: The wavelength_um parameter is primarily for labeling. The MZI
+    itself is broadband and will switch any wavelength. Wavelength
+    selectivity comes from the upstream AWG demux.
+    """
+    c = gf.Component(name)
+
+    # MZI switch core
+    mzi = c << mzi_switch(
+        arm_length=arm_length,
+        arm_spacing=arm_spacing,
+        name=f"mzi_core_{name}"
+    )
+
+    # Add wavelength label for documentation
+    wl_nm = int(wavelength_um * 1000)
+    c.add_label(f"MZI_{wl_nm}", position=(0, arm_spacing + 10), layer=LABEL_LAYER)
+
+    # Expose ports
+    c.add_port(name="input", port=mzi.ports["input"])
+    c.add_port(name="output", port=mzi.ports["output"])
+    c.add_port(name="bar", port=mzi.ports["bar"])
+    c.add_port(name="cross", port=mzi.ports["cross"])
+
+    return c
+
 
 def wavelength_selector(
     wavelength_um: float,
@@ -181,10 +343,11 @@ def sfg_mixer(
     name: str = "sfg_mixer"
 ) -> gf.Component:
     """
-    Creates a Sum-Frequency Generation mixer.
+    Creates a Sum-Frequency Generation mixer for ADDITION.
 
     Mixes two wavelengths via χ² nonlinearity to produce sum frequency.
-    This is where ternary logic operations happen!
+    Output wavelength: λ_out = 1/(1/λ1 + 1/λ2)
+    This effectively computes A + B in ternary.
 
     Args:
         length: Mixer waveguide length (longer = more mixing)
@@ -201,7 +364,95 @@ def sfg_mixer(
         [(0, -width), (length, -width), (length, -width-0.5), (0, -width-0.5)],
         layer=(2, 0)  # Different layer for χ² region marker
     )
-    c.add_label("MIX", position=(length/2, -width - 1), layer=LABEL_LAYER)
+    c.add_label("SFG", position=(length/2, -width - 1), layer=LABEL_LAYER)
+
+    c.add_port(name="input", port=wg.ports["o1"])
+    c.add_port(name="output", port=wg.ports["o2"])
+
+    return c
+
+
+def dfg_mixer(
+    length: float = 25.0,
+    width: float = 0.8,
+    name: str = "dfg_mixer"
+) -> gf.Component:
+    """
+    Creates a Difference-Frequency Generation mixer for SUBTRACTION.
+
+    Uses DFG (χ² nonlinearity) for frequency subtraction.
+    Output wavelength: λ_out = 1/(1/λ1 - 1/λ2)
+    This effectively computes A - B in ternary.
+
+    The DFG process requires slightly longer interaction length than SFG
+    for efficient conversion.
+
+    Args:
+        length: Mixer waveguide length (longer = more mixing)
+        width: Waveguide width
+        name: Component name
+    """
+    c = gf.Component(name)
+
+    # Longer waveguide for DFG (needs more interaction length)
+    wg = c << gf.components.straight(length=length, width=width)
+
+    # Visual marker for DFG region (layer 4)
+    c.add_polygon(
+        [(0, -width), (length, -width), (length, -width-0.5), (0, -width-0.5)],
+        layer=(4, 0)  # Different layer for DFG marker
+    )
+    c.add_label("DFG", position=(length/2, -width - 1), layer=LABEL_LAYER)
+
+    c.add_port(name="input", port=wg.ports["o1"])
+    c.add_port(name="output", port=wg.ports["o2"])
+
+    return c
+
+
+def mul_mixer(
+    length: float = 30.0,
+    width: float = 0.8,
+    name: str = "mul_mixer"
+) -> gf.Component:
+    """
+    Creates a multiplication mixer using Kerr effect (χ³ nonlinearity).
+
+    Implements balanced ternary multiplication:
+      (-1) × (-1) = +1
+      (-1) × ( 0) =  0
+      (-1) × (+1) = -1
+      ( 0) × (-1) =  0
+      ( 0) × ( 0) =  0
+      ( 0) × (+1) =  0
+      (+1) × (-1) = -1
+      (+1) × ( 0) =  0
+      (+1) × (+1) = +1
+
+    The Kerr effect (third-order nonlinearity) enables intensity-dependent
+    phase modulation. Combined with wavelength encoding:
+      - Same sign inputs (R+R or B+B) -> cross-phase modulation -> same sign output
+      - Opposite sign inputs (R+B) -> destructive interference -> opposite sign output
+      - Zero input (G) -> no phase shift -> zero output
+
+    Requires longer interaction length for χ³ compared to χ² processes.
+
+    Args:
+        length: Mixer waveguide length (χ³ needs longer length)
+        width: Waveguide width
+        name: Component name
+    """
+    c = gf.Component(name)
+
+    # Longer waveguide for Kerr effect (χ³ needs more interaction)
+    wg = c << gf.components.straight(length=length, width=width)
+
+    # Visual marker for Kerr/χ³ region (layer 7)
+    c.add_polygon(
+        [(0, -width), (length, -width), (length, -width-0.5), (0, -width-0.5)],
+        layer=(7, 0)  # Different layer for χ³ region marker
+    )
+    c.add_label("MUL", position=(length/2, -width - 1), layer=LABEL_LAYER)
 
     c.add_port(name="input", port=wg.ports["o1"])
     c.add_port(name="output", port=wg.ports["o2"])
@@ -483,7 +734,8 @@ def awg_demux(
 
 def ternary_output_stage_simple(
     name: str = "output_simple",
-    uid: str = ""
+    uid: str = "",
+    include_carry_ports: bool = False
 ) -> gf.Component:
     """
     SIMPLIFIED output stage using single AWG demux instead of 5 ring filters.
@@ -500,11 +752,34 @@ def ternary_output_stage_simple(
     Total savings for 81 ALUs: 405 ring resonators eliminated
 
     Output channels (SFG wavelengths):
-      - Ch1 (0.775 μm): Result = -2 (borrow)
+      - Ch1 (0.775 μm): Result = -2 (borrow) -> CARRY_OUT_NEG
       - Ch2 (0.681 μm): Result = -1
       - Ch3 (0.608 μm): Result = 0
       - Ch4 (0.549 μm): Result = +1
-      - Ch5 (0.500 μm): Result = +2 (carry)
+      - Ch5 (0.500 μm): Result = +2 (carry) -> CARRY_OUT_POS
+
+    Args:
+        include_carry_ports: If True, adds electrical carry output pads for
+                            carry chain wiring between adjacent trits.
+
+    Carry Chain (Electronic Approach):
+    ---------------------------------
+    The DET_-2 (borrow) and DET_+2 (carry) photodetector outputs are
+    exposed as electrical pads (CARRY_OUT_NEG, CARRY_OUT_POS) that can
+    be wired to firmware GPIO or the next trit's carry input.
+
+    Firmware Carry Propagation Algorithm:
+      1. Read all photodetector outputs simultaneously
+      2. For each trit position N (from LSB to MSB):
+         a. Check CARRY_OUT_POS from trit N-1: if active, add +1 to current sum
+         b. Check CARRY_OUT_NEG from trit N-1: if active, add -1 to current sum
+      3. The result at each trit is: A[N] + B[N] + carry_in mod 3
+      4. Generate new carry for trit N+1
+
+    Signal Naming Convention:
+      - CARRY_OUT_POS: Positive overflow (+2 detected) -> add +1 to next trit
+      - CARRY_OUT_NEG: Negative overflow (-2 detected) -> add -1 to next trit (borrow)
+      - CARRY_IN: Combined carry input from previous trit (active-high logic)
     """
     import uuid
     if not uid:
@@ -517,11 +792,11 @@ def ternary_output_stage_simple(
 
     # 5 photodetectors directly connected to AWG outputs
     DETECTOR_CONFIG = [
-        {'value': -2, 'wavelength_um': 0.775, 'name': 'Neg2', 'port': 'out_1'},
-        {'value': -1, 'wavelength_um': 0.681, 'name': 'Neg1', 'port': 'out_2'},
-        {'value':  0, 'wavelength_um': 0.608, 'name': 'Zero', 'port': 'out_3'},
-        {'value': +1, 'wavelength_um': 0.549, 'name': 'Pos1', 'port': 'out_4'},
-        {'value': +2, 'wavelength_um': 0.500, 'name': 'Pos2', 'port': 'out_5'},
+        {'value': -2, 'wavelength_um': 0.775, 'name': 'Neg2', 'port': 'out_1', 'is_carry': True},
+        {'value': -1, 'wavelength_um': 0.681, 'name': 'Neg1', 'port': 'out_2', 'is_carry': False},
+        {'value':  0, 'wavelength_um': 0.608, 'name': 'Zero', 'port': 'out_3', 'is_carry': False},
+        {'value': +1, 'wavelength_um': 0.549, 'name': 'Pos1', 'port': 'out_4', 'is_carry': False},
+        {'value': +2, 'wavelength_um': 0.500, 'name': 'Pos2', 'port': 'out_5', 'is_carry': True},
     ]
 
     y_positions = [24, 12, 0, -12, -24]  # Match AWG output positions
@@ -540,13 +815,40 @@ def ternary_output_stage_simple(
                     port2=det.ports["input"])
 
         # Label
-        is_carry = det_info['value'] in [-2, +2]
-        label_suffix = "_C" if is_carry else ""
+        label_suffix = "_C" if det_info['is_carry'] else ""
         c.add_label(f"D{det_info['value']:+d}{label_suffix}",
                    position=(110, y_positions[i]), layer=LABEL_LAYER)
 
     # Input port
     c.add_port(name="input", port=awg.ports["input"])
+
+    # Add electrical carry output pads if requested
+    if include_carry_ports:
+        # CARRY_OUT_NEG pad: electrical output from DET_-2 (borrow signal)
+        # Position: right side of DET_-2, top of output stage
+        c.add_polygon(
+            [(120, y_positions[0] - 3), (130, y_positions[0] - 3),
+             (130, y_positions[0] + 3), (120, y_positions[0] + 3)],
+            layer=HEATER_LAYER  # Using heater layer for electrical pads
+        )
+        c.add_label("CARRY_OUT_NEG", position=(125, y_positions[0] + 7), layer=LABEL_LAYER)
+
+        # CARRY_OUT_POS pad: electrical output from DET_+2 (carry signal)
+        # Position: right side of DET_+2, bottom of output stage
+        c.add_polygon(
+            [(120, y_positions[4] - 3), (130, y_positions[4] - 3),
+             (130, y_positions[4] + 3), (120, y_positions[4] + 3)],
+            layer=HEATER_LAYER
+        )
+        c.add_label("CARRY_OUT_POS", position=(125, y_positions[4] - 9), layer=LABEL_LAYER)
+
+        # CARRY_IN pad: electrical input for carry from previous trit
+        # Position: left side of output stage, near optical input
+        c.add_polygon(
+            [(-15, -3), (-5, -3), (-5, 3), (-15, 3)],
+            layer=HEATER_LAYER
+        )
+        c.add_label("CARRY_IN", position=(-10, 7), layer=LABEL_LAYER)
 
     c.add_label("OUT_AWG", position=(50, 40), layer=LABEL_LAYER)
 
@@ -727,13 +1029,22 @@ def ternary_output_stage(
 def ternary_input_stage(
     operand_name: str = "A",
     y_offset: float = 0,
-    uid: str = ""
+    uid: str = "",
+    selector_type: Literal['ring', 'mzi'] = 'ring'
 ) -> gf.Component:
     """
     Creates an input stage for one ternary operand.
 
     Structure: Input -> Splitter -> 3x Selectors (R/G/B)
     Each selector can be individually enabled to set the ternary value.
+
+    Args:
+        operand_name: Name for this operand (e.g., "A" or "B")
+        y_offset: Vertical offset for positioning
+        uid: Unique identifier suffix
+        selector_type: Type of wavelength selector to use:
+            - 'ring': Ring resonator (default, wavelength-selective)
+            - 'mzi': MZI switch (better extinction, broader bandwidth)
     """
     c = gf.Component(f"input_{operand_name}_{uid}")
 
@@ -741,23 +1052,31 @@ def ternary_input_stage(
     splitter = c << wavelength_splitter(n_outputs=3, name=f"split_{operand_name}_{uid}")
 
     # Three selectors for R, G, B
-    y_spacing = 30
+    y_spacing = 30 if selector_type == 'ring' else 40  # MZI needs more vertical space
+    x_offset = 60 if selector_type == 'ring' else 60
     selectors = []
 
     for i, (trit, info) in enumerate(TERNARY_ENCODING.items()):
-        sel = c << wavelength_selector(
-            wavelength_um=info['wavelength_um'],
-            name=f"sel_{operand_name}_{info['name']}_{uid}"
-        )
-        sel.dmove((60, (i - 1) * y_spacing))
+        if selector_type == 'mzi':
+            sel = c << wavelength_selector_mzi(
+                wavelength_um=info['wavelength_um'],
+                name=f"sel_{operand_name}_{info['name']}_{uid}"
+            )
+        else:
+            sel = c << wavelength_selector(
+                wavelength_um=info['wavelength_um'],
+                name=f"sel_{operand_name}_{info['name']}_{uid}"
+            )
+        sel.dmove((x_offset, (i - 1) * y_spacing))
         selectors.append(sel)
 
         # Route splitter to selector
         route_single(c, cross_section=XS, port1=splitter.ports[f"out{i+1}"], port2=sel.ports["input"])
 
     # Combiner to merge selected wavelengths
+    combiner_x = 130 if selector_type == 'ring' else 180  # MZI is wider
     combiner = c << wavelength_combiner(n_inputs=3, name=f"comb_{operand_name}_{uid}")
-    combiner.dmove((130, 0))
+    combiner.dmove((combiner_x, 0))
 
     # Route selectors to combiner
     for i, sel in enumerate(selectors):
@@ -775,7 +1094,8 @@ def ternary_input_stage(
 
 def generate_ternary_alu(
     operations: List[str] = ["add"],
-    name: str = "TernaryALU"
+    name: str = "TernaryALU",
+    selector_type: Literal['ring', 'mzi'] = 'ring'
 ) -> gf.Component:
     """
     Generates a complete Ternary ALU chip.
@@ -783,6 +1103,10 @@ def generate_ternary_alu(
     Args:
         operations: List of operations to support ['add', 'multiply', 'compare']
         name: Chip name
+        selector_type: Type of wavelength selector to use:
+            - 'ring': Ring resonator (default, wavelength-selective)
+            - 'mzi': MZI switch (better extinction ratio, broader bandwidth,
+                     more tolerant to fabrication variations)
 
     Returns:
         Complete chip layout
@@ -795,8 +1119,8 @@ def generate_ternary_alu(
     # =========================
     # 1. INPUT STAGES (2 operands)
     # =========================
-    input_a = c << ternary_input_stage("A", y_offset=50, uid=uid)
-    input_b = c << ternary_input_stage("B", y_offset=-50, uid=uid)
+    input_a = c << ternary_input_stage("A", y_offset=50, uid=uid, selector_type=selector_type)
+    input_b = c << ternary_input_stage("B", y_offset=-50, uid=uid, selector_type=selector_type)
 
     # =========================
     # 2. OPERATION COMBINER
@@ -935,7 +1259,9 @@ def generate_full_processor(
 
 def generate_complete_alu(
     name: str = "TernaryComplete",
-    simplified_output: bool = True
+    simplified_output: bool = True,
+    operation: Literal['add', 'sub', 'mul'] = 'add',
+    selector_type: Literal['ring', 'mzi'] = 'ring'
 ) -> gf.Component:
     """
     Generates a complete single-trit ALU with optical frontend and output stage.
@@ -944,15 +1270,24 @@ def generate_complete_alu(
       CW Laser → Kerr Clock → Y-Split → AWG_A → Selectors_A → Combiner
                                      → AWG_B → Selectors_B → Combiner
                                                                   ↓
-                                                            SFG Mixer
+                                                            Mixer (SFG/DFG/MUL)
                                                                   ↓
                                                          Output Stage (5 detectors)
                                                                   ↓
                                                          DET_-2 to DET_+2
 
     Args:
+        name: Component name.
         simplified_output: If True, uses single AWG demux (fewer components).
                           If False, uses 5 ring filters (more precise but complex).
+        operation: The arithmetic operation to perform:
+                   - 'add': Addition using SFG (Sum Frequency Generation)
+                   - 'sub': Subtraction using DFG (Difference Frequency Generation)
+                   - 'mul': Multiplication using Kerr effect (χ³ nonlinearity)
+        selector_type: Type of wavelength selector to use:
+                   - 'ring': Ring resonator (default, wavelength-selective)
+                   - 'mzi': MZI switch (better extinction ratio, broader bandwidth,
+                            more tolerant to fabrication variations, voltage-tuned)
     """
     import uuid
     uid = str(uuid.uuid4())[:8]
@@ -969,13 +1304,26 @@ def generate_complete_alu(
     # 2. INPUT SELECTORS FOR A
     # =========================
     # Three selectors for R, G, B on operand A
-    sel_a_r = c << wavelength_selector(wavelength_um=1.550, name=f"sel_a_r_{uid}")
-    sel_a_g = c << wavelength_selector(wavelength_um=1.216, name=f"sel_a_g_{uid}")
-    sel_a_b = c << wavelength_selector(wavelength_um=1.000, name=f"sel_a_b_{uid}")
-
-    sel_a_r.dmove((200, 60))
-    sel_a_g.dmove((200, 30))
-    sel_a_b.dmove((200, 0))
+    # Selector function and positioning based on selector_type
+    if selector_type == 'mzi':
+        sel_a_r = c << wavelength_selector_mzi(wavelength_um=1.550, name=f"sel_a_r_{uid}")
+        sel_a_g = c << wavelength_selector_mzi(wavelength_um=1.216, name=f"sel_a_g_{uid}")
+        sel_a_b = c << wavelength_selector_mzi(wavelength_um=1.000, name=f"sel_a_b_{uid}")
+        # MZI needs more spacing due to larger footprint
+        sel_a_r.dmove((200, 80))
+        sel_a_g.dmove((200, 40))
+        sel_a_b.dmove((200, 0))
+        comb_a_x = 320  # Combiner positioned further for MZI
+        comb_a_y = 40
+    else:
+        sel_a_r = c << wavelength_selector(wavelength_um=1.550, name=f"sel_a_r_{uid}")
+        sel_a_g = c << wavelength_selector(wavelength_um=1.216, name=f"sel_a_g_{uid}")
+        sel_a_b = c << wavelength_selector(wavelength_um=1.000, name=f"sel_a_b_{uid}")
+        sel_a_r.dmove((200, 60))
+        sel_a_g.dmove((200, 30))
+        sel_a_b.dmove((200, 0))
+        comb_a_x = 280
+        comb_a_y = 30
 
     # Route frontend AWG_A outputs to selectors
     route_single(c, cross_section=XS, port1=frontend.ports["a_red"], port2=sel_a_r.ports["input"])
@@ -984,7 +1332,7 @@ def generate_complete_alu(
 
     # Combiner for A
     comb_a = c << wavelength_combiner(n_inputs=3, name=f"comb_a_{uid}")
-    comb_a.dmove((280, 30))
+    comb_a.dmove((comb_a_x, comb_a_y))
 
     route_single(c, cross_section=XS, port1=sel_a_r.ports["output"], port2=comb_a.ports["in1"])
     route_single(c, cross_section=XS, port1=sel_a_g.ports["output"], port2=comb_a.ports["in2"])
@@ -993,13 +1341,25 @@ def generate_complete_alu(
     # =========================
     # 3. INPUT SELECTORS FOR B
     # =========================
-    sel_b_r = c << wavelength_selector(wavelength_um=1.550, name=f"sel_b_r_{uid}")
-    sel_b_g = c << wavelength_selector(wavelength_um=1.216, name=f"sel_b_g_{uid}")
-    sel_b_b = c << wavelength_selector(wavelength_um=1.000, name=f"sel_b_b_{uid}")
-
-    sel_b_r.dmove((200, -60))
-    sel_b_g.dmove((200, -30))
-    sel_b_b.dmove((200, 0 - 60))
+    if selector_type == 'mzi':
+        sel_b_r = c << wavelength_selector_mzi(wavelength_um=1.550, name=f"sel_b_r_{uid}")
+        sel_b_g = c << wavelength_selector_mzi(wavelength_um=1.216, name=f"sel_b_g_{uid}")
+        sel_b_b = c << wavelength_selector_mzi(wavelength_um=1.000, name=f"sel_b_b_{uid}")
+        # MZI needs more spacing
+        sel_b_r.dmove((200, -40))
+        sel_b_g.dmove((200, -80))
+        sel_b_b.dmove((200, -120))
+        comb_b_x = 320
+        comb_b_y = -80
+    else:
+        sel_b_r = c << wavelength_selector(wavelength_um=1.550, name=f"sel_b_r_{uid}")
+        sel_b_g = c << wavelength_selector(wavelength_um=1.216, name=f"sel_b_g_{uid}")
+        sel_b_b = c << wavelength_selector(wavelength_um=1.000, name=f"sel_b_b_{uid}")
+        sel_b_r.dmove((200, -60))
+        sel_b_g.dmove((200, -30))
+        sel_b_b.dmove((200, 0 - 60))
+        comb_b_x = 280
+        comb_b_y = -60
 
     # Route frontend AWG_B outputs to selectors
     route_single(c, cross_section=XS, port1=frontend.ports["b_red"], port2=sel_b_r.ports["input"])
@@ -1008,7 +1368,7 @@ def generate_complete_alu(
 
     # Combiner for B
     comb_b = c << wavelength_combiner(n_inputs=3, name=f"comb_b_{uid}")
-    comb_b.dmove((280, -60))
+    comb_b.dmove((comb_b_x, comb_b_y))
 
     route_single(c, cross_section=XS, port1=sel_b_r.ports["output"], port2=comb_b.ports["in1"])
     route_single(c, cross_section=XS, port1=sel_b_g.ports["output"], port2=comb_b.ports["in2"])
@@ -1024,9 +1384,24 @@ def generate_complete_alu(
     route_single(c, cross_section=XS, port1=comb_b.ports["output"], port2=op_combiner.ports["o2"])
 
     # =========================
-    # 5. SFG MIXER
+    # 5. MIXER (operation-dependent)
     # =========================
-    mixer = c << sfg_mixer(length=20, name=f"mixer_{uid}")
+    # Select mixer type based on operation
+    if operation == 'add':
+        # SFG mixer for addition: λ_out = 1/(1/λ1 + 1/λ2)
+        mixer = c << sfg_mixer(length=20, name=f"sfg_mixer_{uid}")
+        op_label = "ADD_SFG"
+    elif operation == 'sub':
+        # DFG mixer for subtraction: λ_out = 1/(1/λ1 - 1/λ2)
+        mixer = c << dfg_mixer(length=25, name=f"dfg_mixer_{uid}")
+        op_label = "SUB_DFG"
+    elif operation == 'mul':
+        # Kerr/χ³ mixer for multiplication
+        mixer = c << mul_mixer(length=30, name=f"mul_mixer_{uid}")
+        op_label = "MUL_KERR"
+    else:
+        raise ValueError(f"Unknown operation '{operation}'. Must be 'add', 'sub', or 'mul'.")
+
     mixer.dmove((430, 0))
 
     route_single(c, cross_section=XS, port1=op_combiner.ports["o3"], port2=mixer.ports["input"])
@@ -1045,7 +1420,7 @@ def generate_complete_alu(
     # =========================
     # 7. LABELS
     # =========================
-    c.add_label("COMPLETE_ALU", position=(250, 100), layer=LABEL_LAYER)
+    c.add_label(f"ALU_{op_label}", position=(250, 100), layer=LABEL_LAYER)
     c.add_label("LASER_IN", position=(-20, 0), layer=LABEL_LAYER)
 
     # Add port for laser input
@@ -1166,7 +1541,9 @@ def cascaded_splitter_1to9(
 
 def generate_complete_81_trit(
     name: str = "Ternary81_Complete",
-    simplified_output: bool = True
+    simplified_output: bool = True,
+    operation: Literal['add', 'sub', 'mul'] = 'add',
+    selector_type: Literal['ring', 'mzi'] = 'ring'
 ) -> gf.Component:
     """
     Generates a complete 81-trit processor with CENTERED optical frontend.
@@ -1178,15 +1555,33 @@ def generate_complete_81_trit(
       - 3×3 zone structure (9 zones × 9 ALUs each)
 
     Args:
+        name: Component name.
         simplified_output: If True (default), uses single AWG demux per ALU.
                           Reduces component count by ~40% (405 fewer ring resonators).
                           If False, uses 5 ring filters per ALU (more precise).
+        operation: The arithmetic operation to perform:
+                   - 'add': Addition using SFG (Sum Frequency Generation)
+                   - 'sub': Subtraction using DFG (Difference Frequency Generation)
+                   - 'mul': Multiplication using Kerr effect (χ³ nonlinearity)
+        selector_type: Type of wavelength selector to use:
+                   - 'ring': Ring resonator (default, wavelength-selective)
+                   - 'mzi': MZI switch (better extinction ratio, broader bandwidth,
+                            more tolerant to fabrication variations, voltage-tuned)
 
     Signal flow:
       CW Laser → Kerr Clock → Y-Junction (center of chip)
                                   ├→ A splitter tree (radiates outward) → AWG_A → Sel_A → Comb_A ─┐
                                   │                                                                ├→ OpComb → Mixer → Output
                                   └→ B splitter tree (radiates outward) → AWG_B → Sel_B → Comb_B ─┘
+
+    Mixer types by operation:
+      - add: SFG mixer (λ_out = 1/(1/λ1 + 1/λ2))
+      - sub: DFG mixer (λ_out = 1/(1/λ1 - 1/λ2))
+      - mul: Kerr/χ³ mixer (sign multiplication)
+
+    Selector types:
+      - ring: Ring resonators (compact, wavelength-selective, but sensitive to fab)
+      - mzi: MZI switches (better extinction, fab-tolerant, voltage-tuned, broader BW)
 
     Benefits of centered layout:
       - Reduces maximum path length by ~50%
@@ -1310,26 +1705,47 @@ def generate_complete_81_trit(
                                 port2=awg_b.ports["input"])
 
                     # --- Selectors for A (R, G, B) ---
-                    sel_a_r = c << wavelength_selector(wavelength_um=1.550, name=f"sel_a_r_t{trit_index}_{uid}")
-                    sel_a_g = c << wavelength_selector(wavelength_um=1.216, name=f"sel_a_g_t{trit_index}_{uid}")
-                    sel_a_b = c << wavelength_selector(wavelength_um=1.000, name=f"sel_a_b_t{trit_index}_{uid}")
-
-                    sel_a_r.dmove((x_pos + 70, y_pos + 60))
-                    sel_a_g.dmove((x_pos + 70, y_pos + 35))
-                    sel_a_b.dmove((x_pos + 70, y_pos + 10))
+                    # Use MZI or ring based on selector_type parameter
+                    if selector_type == 'mzi':
+                        sel_a_r = c << wavelength_selector_mzi(wavelength_um=1.550, name=f"sel_a_r_t{trit_index}_{uid}")
+                        sel_a_g = c << wavelength_selector_mzi(wavelength_um=1.216, name=f"sel_a_g_t{trit_index}_{uid}")
+                        sel_a_b = c << wavelength_selector_mzi(wavelength_um=1.000, name=f"sel_a_b_t{trit_index}_{uid}")
+                        # MZI needs more spacing (larger footprint)
+                        sel_a_r.dmove((x_pos + 70, y_pos + 75))
+                        sel_a_g.dmove((x_pos + 70, y_pos + 40))
+                        sel_a_b.dmove((x_pos + 70, y_pos + 5))
+                        comb_a_x_offset = 180  # Combiner further out for MZI
+                    else:
+                        sel_a_r = c << wavelength_selector(wavelength_um=1.550, name=f"sel_a_r_t{trit_index}_{uid}")
+                        sel_a_g = c << wavelength_selector(wavelength_um=1.216, name=f"sel_a_g_t{trit_index}_{uid}")
+                        sel_a_b = c << wavelength_selector(wavelength_um=1.000, name=f"sel_a_b_t{trit_index}_{uid}")
+                        sel_a_r.dmove((x_pos + 70, y_pos + 60))
+                        sel_a_g.dmove((x_pos + 70, y_pos + 35))
+                        sel_a_b.dmove((x_pos + 70, y_pos + 10))
+                        comb_a_x_offset = 140
 
                     route_single(c, cross_section=XS, port1=awg_a.ports["out_r"], port2=sel_a_r.ports["input"])
                     route_single(c, cross_section=XS, port1=awg_a.ports["out_g"], port2=sel_a_g.ports["input"])
                     route_single(c, cross_section=XS, port1=awg_a.ports["out_b"], port2=sel_a_b.ports["input"])
 
                     # --- Selectors for B (R, G, B) ---
-                    sel_b_r = c << wavelength_selector(wavelength_um=1.550, name=f"sel_b_r_t{trit_index}_{uid}")
-                    sel_b_g = c << wavelength_selector(wavelength_um=1.216, name=f"sel_b_g_t{trit_index}_{uid}")
-                    sel_b_b = c << wavelength_selector(wavelength_um=1.000, name=f"sel_b_b_t{trit_index}_{uid}")
-
-                    sel_b_r.dmove((x_pos + 70, y_pos - 10))
-                    sel_b_g.dmove((x_pos + 70, y_pos - 35))
-                    sel_b_b.dmove((x_pos + 70, y_pos - 60))
+                    if selector_type == 'mzi':
+                        sel_b_r = c << wavelength_selector_mzi(wavelength_um=1.550, name=f"sel_b_r_t{trit_index}_{uid}")
+                        sel_b_g = c << wavelength_selector_mzi(wavelength_um=1.216, name=f"sel_b_g_t{trit_index}_{uid}")
+                        sel_b_b = c << wavelength_selector_mzi(wavelength_um=1.000, name=f"sel_b_b_t{trit_index}_{uid}")
+                        # MZI needs more spacing
+                        sel_b_r.dmove((x_pos + 70, y_pos - 5))
+                        sel_b_g.dmove((x_pos + 70, y_pos - 40))
+                        sel_b_b.dmove((x_pos + 70, y_pos - 75))
+                        comb_b_x_offset = 180
+                    else:
+                        sel_b_r = c << wavelength_selector(wavelength_um=1.550, name=f"sel_b_r_t{trit_index}_{uid}")
+                        sel_b_g = c << wavelength_selector(wavelength_um=1.216, name=f"sel_b_g_t{trit_index}_{uid}")
+                        sel_b_b = c << wavelength_selector(wavelength_um=1.000, name=f"sel_b_b_t{trit_index}_{uid}")
+                        sel_b_r.dmove((x_pos + 70, y_pos - 10))
+                        sel_b_g.dmove((x_pos + 70, y_pos - 35))
+                        sel_b_b.dmove((x_pos + 70, y_pos - 60))
+                        comb_b_x_offset = 140
 
                     route_single(c, cross_section=XS, port1=awg_b.ports["out_r"], port2=sel_b_r.ports["input"])
                     route_single(c, cross_section=XS, port1=awg_b.ports["out_g"], port2=sel_b_g.ports["input"])
@@ -1337,7 +1753,7 @@ def generate_complete_81_trit(
 
                     # --- Combiner for A ---
                     comb_a = c << wavelength_combiner(n_inputs=3, name=f"comb_a_t{trit_index}_{uid}")
-                    comb_a.dmove((x_pos + 140, y_pos + 35))
+                    comb_a.dmove((x_pos + comb_a_x_offset, y_pos + 35))
 
                     route_single(c, cross_section=XS, port1=sel_a_r.ports["output"], port2=comb_a.ports["in1"])
                     route_single(c, cross_section=XS, port1=sel_a_g.ports["output"], port2=comb_a.ports["in2"])
@@ -1345,7 +1761,7 @@ def generate_complete_81_trit(
 
                     # --- Combiner for B ---
                     comb_b = c << wavelength_combiner(n_inputs=3, name=f"comb_b_t{trit_index}_{uid}")
-                    comb_b.dmove((x_pos + 140, y_pos - 35))
+                    comb_b.dmove((x_pos + comb_b_x_offset, y_pos - 35))
 
                     route_single(c, cross_section=XS, port1=sel_b_r.ports["output"], port2=comb_b.ports["in1"])
                     route_single(c, cross_section=XS, port1=sel_b_g.ports["output"], port2=comb_b.ports["in2"])
@@ -1358,15 +1774,30 @@ def generate_complete_81_trit(
                     route_single(c, cross_section=XS, port1=comb_a.ports["output"], port2=op_comb.ports["o1"])
                     route_single(c, cross_section=XS, port1=comb_b.ports["output"], port2=op_comb.ports["o2"])
 
-                    # --- SFG Mixer ---
-                    mixer = c << sfg_mixer(length=20, name=f"mixer_t{trit_index}_{uid}")
+                    # --- Mixer (operation-dependent) ---
+                    if operation == 'add':
+                        # SFG mixer for addition
+                        mixer = c << sfg_mixer(length=20, name=f"sfg_t{trit_index}_{uid}")
+                    elif operation == 'sub':
+                        # DFG mixer for subtraction
+                        mixer = c << dfg_mixer(length=25, name=f"dfg_t{trit_index}_{uid}")
+                    elif operation == 'mul':
+                        # Kerr/χ³ mixer for multiplication
+                        mixer = c << mul_mixer(length=30, name=f"mul_t{trit_index}_{uid}")
+                    else:
+                        raise ValueError(f"Unknown operation '{operation}'. Must be 'add', 'sub', or 'mul'.")
+
                     mixer.dmove((x_pos + 270, y_pos))
 
                     route_single(c, cross_section=XS, port1=op_comb.ports["o3"], port2=mixer.ports["input"])
 
-                    # --- Output Stage (5-channel detector) ---
+                    # --- Output Stage (5-channel detector with carry ports) ---
                     if simplified_output:
-                        output = c << ternary_output_stage_simple(name=f"out_t{trit_index}_{uid}", uid=uid)
+                        output = c << ternary_output_stage_simple(
+                            name=f"out_t{trit_index}_{uid}",
+                            uid=uid,
+                            include_carry_ports=True  # Enable carry chain wiring
+                        )
                     else:
                         output = c << ternary_output_stage(name=f"out_t{trit_index}_{uid}", uid=uid)
                     output.dmove((x_pos + 320, y_pos))
@@ -1376,13 +1807,47 @@ def generate_complete_81_trit(
                     # --- ALU Label ---
                     c.add_label(f"T{trit_index}", position=(x_pos + 180, y_pos + 80), layer=LABEL_LAYER)
 
+                    # --- Carry Chain Labels ---
+                    # Label the carry signals for firmware wiring documentation
+                    # These identify the electrical connections between adjacent trits
+                    if trit_index > 0:
+                        # Mark carry input from previous trit
+                        c.add_label(f"CIN_T{trit_index}<-T{trit_index-1}",
+                                   position=(x_pos + 305, y_pos + 10), layer=LABEL_LAYER)
+                    if trit_index < 80:  # Not the MSB
+                        # Mark carry outputs to next trit
+                        c.add_label(f"COUT_T{trit_index}->T{trit_index+1}",
+                                   position=(x_pos + 450, y_pos - 30), layer=LABEL_LAYER)
+
                     trit_index += 1
 
     # =========================
-    # 4. CHIP LABELS
+    # 4. CARRY CHAIN DOCUMENTATION
     # =========================
-    c.add_label("81T_CENTERED", position=(chip_center_x, chip_center_y + zone_spacing + 200), layer=LABEL_LAYER)
+    # Add carry chain wiring guide at chip edge
+    carry_doc_x = chip_center_x - zone_spacing - 200
+    carry_doc_y = chip_center_y + zone_spacing + 100
+
+    c.add_label("CARRY_CHAIN_WIRING:", position=(carry_doc_x, carry_doc_y), layer=LABEL_LAYER)
+    c.add_label("T0->T1->T2->...->T80 (LSB to MSB)", position=(carry_doc_x, carry_doc_y - 20), layer=LABEL_LAYER)
+    c.add_label("Wire: CARRY_OUT_POS[N] -> CARRY_IN[N+1] (positive carry)", position=(carry_doc_x, carry_doc_y - 40), layer=LABEL_LAYER)
+    c.add_label("Wire: CARRY_OUT_NEG[N] -> CARRY_IN[N+1] (borrow)", position=(carry_doc_x, carry_doc_y - 60), layer=LABEL_LAYER)
+    c.add_label("Firmware: Handle via GPIO or dedicated carry logic", position=(carry_doc_x, carry_doc_y - 80), layer=LABEL_LAYER)
+
+    # =========================
+    # 5. CHIP LABELS
+    # =========================
+    # Operation-specific label
+    op_labels = {'add': 'ADD_SFG', 'sub': 'SUB_DFG', 'mul': 'MUL_KERR'}
+    op_label = op_labels.get(operation, 'UNKNOWN')
+
+    # Selector type label
+    sel_label = 'MZI' if selector_type == 'mzi' else 'RING'
+
+    c.add_label(f"81T_{op_label}_{sel_label}", position=(chip_center_x, chip_center_y + zone_spacing + 200), layer=LABEL_LAYER)
     c.add_label("9_ZONES_x_9_ALUs", position=(chip_center_x, chip_center_y + zone_spacing + 150), layer=LABEL_LAYER)
+    c.add_label("WITH_CARRY_CHAIN", position=(chip_center_x, chip_center_y + zone_spacing + 100), layer=LABEL_LAYER)
+    c.add_label(f"SELECTORS: {sel_label}", position=(chip_center_x, chip_center_y + zone_spacing + 50), layer=LABEL_LAYER)
     c.add_label("FRONTEND_CENTER", position=(chip_center_x, chip_center_y - 80), layer=LABEL_LAYER)
 
     # Add master clock port
@@ -1493,17 +1958,27 @@ def interactive_generator():
     elif choice == "10":
         print("Generating COMPLETE ALU with optical frontend...")
         print("  Laser → Kerr Clock → Y-Split → AWGs → Selectors → Mixer → 3-channel Output")
-        chip = generate_complete_alu()
-        chip_name = "ternary_complete_alu"
+        print("\nSelector type:")
+        print("  1. Ring resonator (default, compact)")
+        print("  2. MZI switch (better extinction, fab-tolerant)")
+        sel_choice = input("Select (1/2): ").strip()
+        sel_type = 'mzi' if sel_choice == "2" else 'ring'
+        chip = generate_complete_alu(selector_type=sel_type)
+        chip_name = f"ternary_complete_alu_{sel_type}"
     elif choice == "11":
         print("Generating FULL 81-TRIT CHIP...")
         print("  Master clock + 9×9 grid of complete ALUs")
+        print("\nSelector type:")
+        print("  1. Ring resonator (default, compact)")
+        print("  2. MZI switch (better extinction, fab-tolerant)")
+        sel_choice = input("Select (1/2): ").strip()
+        sel_type = 'mzi' if sel_choice == "2" else 'ring'
         print("  This may take a moment...")
-        chip = generate_complete_81_trit()
-        chip_name = "ternary_81trit_full"
+        chip = generate_complete_81_trit(selector_type=sel_type)
+        chip_name = f"ternary_81trit_full_{sel_type}"
     elif choice == "9":
         print("\nCustom components:")
-        print("  a. Wavelength Selector")
+        print("  a. Wavelength Selector (ring resonator)")
         print("  b. SFG Mixer (addition/multiply)")
         print("  c. DFG Divider (subtraction/divide)")
         print("  d. Wavelength Inverter (negation)")
@@ -1514,7 +1989,9 @@ def interactive_generator():
         print("  i. Y-Junction (beam splitter)")
         print("  j. AWG Demux (wavelength separator)")
         print("  k. Optical Frontend (complete input stage)")
-        sub = input("Select (a-k): ").strip().lower()
+        print("  l. MZI Switch (Mach-Zehnder interferometer)")
+        print("  m. MZI Wavelength Selector (MZI-based gating)")
+        sub = input("Select (a-m): ").strip().lower()
 
         if sub == "a":
             wvl = float(input("Wavelength (μm, e.g., 1.55): "))
@@ -1552,6 +2029,18 @@ def interactive_generator():
             print("  Kerr resonator (clock) -> Y-junction -> 2x AWG demux")
             chip = optical_frontend()
             chip_name = "optical_frontend"
+        elif sub == "l":
+            print("Generating MZI Switch...")
+            print("  Two 3dB couplers + phase shifter arms")
+            print("  Better extinction ratio than ring resonators")
+            chip = mzi_switch()
+            chip_name = "mzi_switch"
+        elif sub == "m":
+            wvl = float(input("Wavelength (μm, e.g., 1.55): "))
+            print("Generating MZI Wavelength Selector...")
+            print("  MZI switch with wavelength label")
+            chip = wavelength_selector_mzi(wavelength_um=wvl)
+            chip_name = f"mzi_selector_{wvl}um"
         else:
             print("Invalid selection")
             return
