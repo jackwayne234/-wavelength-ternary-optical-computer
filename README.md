@@ -26,15 +26,26 @@
 
 | Date | Update |
 |------|--------|
-| Feb 2026 | Added 81-trit ternary architecture GDS layout for chip fabrication |
-| Feb 2026 | Added ternary chip generator tool and architecture documentation |
-| Feb 2026 | Phase 4 polymer material simulation results complete |
-| Feb 2026 | Academic profile setup and BibTeX citations added |
+| Feb 2026 | Labels on dedicated GDS layer for KLayout toggle |
+| Feb 2026 | 3-channel wavelength-discriminating output stage |
+| Feb 2026 | Foundry submission docs: design summary, inquiry email |
+| Feb 2026 | 81-trit ternary architecture GDS layout |
+| Feb 2026 | Ternary chip generator tool |
+
+<details>
+<summary>Show older updates</summary>
+
+| Date | Update |
+|------|--------|
+| Feb 2026 | Phase 4 polymer material simulation results |
+| Feb 2026 | Academic profile setup and BibTeX citations |
 | Jan 2026 | Software DOI badge and dual-citation system |
 | Jan 2026 | Zenodo-GitHub integration for automatic releases |
-| Jan 2026 | Research Literature Search Tool deployed (free on Render.com) |
-| Jan 2026 | Open source infrastructure: safety docs, community guidelines |
+| Jan 2026 | Research Literature Search Tool (Render.com) |
+| Jan 2026 | Open source infrastructure: safety docs |
 | Jan 2026 | Initial release with Zenodo publication |
+
+</details>
 
 This repository contains the research, simulation, and hardware implementation files for a novel **Ternary (Base-3) Optical Computer** that uses wavelength-division multiplexing to bypass the fundamental limitations of electronic ternary logic.
 
