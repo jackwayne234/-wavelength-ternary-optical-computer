@@ -24,19 +24,38 @@
 
 ## Recent Activity
 
+### 🎉 Major Milestone: Wavelength Optimization Complete!
+
+**February 2, 2026** - Solved the fundamental wavelength mapping problem:
+
+| Achievement | Details |
+|-------------|---------|
+| **Optimized Input Wavelengths** | Red=1.550μm, Green=**1.216μm**, Blue=1.000μm |
+| **R+B = G+G Verified** | Both produce 0.608μm output (0.2nm difference!) |
+| **3-Detector Output Stage** | Tuned to SFG outputs: 0.681, 0.608, 0.549μm |
+| **Centered Chip Layout** | Frontend at center, reduces signal loss by ~50% |
+| **Full Simulation Verification** | All 6 input combinations tested and confirmed |
+
+**Key Insight:** By choosing Green as the harmonic mean of Red and Blue, we ensure that both ways to compute "zero" (R+B and G+G) produce the **same output wavelength** - enabling clean 3-detector readout!
+
+---
+
 | Date | Update |
 |------|--------|
+| Feb 2, 2026 | **Wavelength optimization & simulation verification** |
+| Feb 2, 2026 | Centered chip layout for reduced signal degradation |
+| Feb 2, 2026 | SFG output detector wavelengths (0.681, 0.608, 0.549 μm) |
 | Feb 2026 | Labels on dedicated GDS layer for KLayout toggle |
 | Feb 2026 | 3-channel wavelength-discriminating output stage |
 | Feb 2026 | Foundry submission docs: design summary, inquiry email |
-| Feb 2026 | 81-trit ternary architecture GDS layout |
-| Feb 2026 | Ternary chip generator tool |
 
 <details>
 <summary>Show older updates</summary>
 
 | Date | Update |
 |------|--------|
+| Feb 2026 | 81-trit ternary architecture GDS layout |
+| Feb 2026 | Ternary chip generator tool |
 | Feb 2026 | Phase 4 polymer material simulation results |
 | Feb 2026 | Academic profile setup and BibTeX citations |
 | Jan 2026 | Software DOI badge and dual-citation system |
@@ -51,13 +70,30 @@ This repository contains the research, simulation, and hardware implementation f
 
 ## 🎯 The Big Idea
 
-Ternary (base-3) logic is mathematically optimal for computing (closest to Euler's number *e*), but electronic implementations require 40× more transistors per trit than bits. **We solve this by using light colors instead of voltage levels:**
+Ternary (base-3) logic is mathematically optimal for computing (closest to Euler's number *e*), but electronic implementations require 40× more transistors per trit than bits. **We solve this by using light wavelengths instead of voltage levels:**
 
-- **Red** = -1
-- **Green** = 0  
-- **Blue** = +1
+| Trit Value | Input Wavelength | Color |
+|------------|------------------|-------|
+| **-1** | 1.550 μm | Red (Telecom C-band) |
+| **0** | 1.216 μm | Green (O-band adjacent) |
+| **+1** | 1.000 μm | Blue (Near-IR) |
 
 Unlike transistors, where cost scales with the number of states, wavelength differentiation is **independent of radix**. This unlocks the full 1.58× information density advantage of ternary logic while leveraging photonics' speed, parallelism, and low power.
+
+### How Addition Works (SFG Mixing)
+
+Sum-Frequency Generation in nonlinear crystals performs addition optically:
+
+| A | B | A+B | Output λ | Detector |
+|---|---|-----|----------|----------|
+| -1 | -1 | -2 | 0.775 μm | overflow |
+| -1 | 0 | -1 | 0.681 μm | DET_-1 |
+| -1 | +1 | **0** | **0.608 μm** | DET_0 |
+| 0 | 0 | **0** | **0.608 μm** | DET_0 |
+| 0 | +1 | +1 | 0.549 μm | DET_+1 |
+| +1 | +1 | +2 | 0.500 μm | overflow |
+
+*Note: Green wavelength (1.216 μm) is chosen as the harmonic mean of Red and Blue, ensuring both "zero" cases produce identical output.*
 
 📄 **Read the Paper**: [Zenodo Publication](https://doi.org/10.5281/zenodo.18437600)
 

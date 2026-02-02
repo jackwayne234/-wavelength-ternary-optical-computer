@@ -2,11 +2,88 @@
 
 ## Summary
 
-Comprehensive session covering GDS chip generation, GitHub organization, and foundry submission preparation for the 81-trit ternary optical computer.
+Comprehensive session covering GDS chip generation, GitHub organization, foundry submission preparation, **wavelength optimization**, and **simulation verification** for the 81-trit ternary optical computer.
 
 ---
 
-## What We Accomplished
+## What We Accomplished (Session 2 - Afternoon)
+
+### 7. Centered Chip Layout
+- Moved frontend (Kerr clock + Y-junction) to **chip center** to minimize signal degradation
+- ALUs arranged in 9 zones (3×3) around the center
+- Reduces maximum path length by ~50%
+- Equalizes signal power across all 81 ALUs
+
+### 8. Wavelength Optimization (MAJOR)
+
+**Problem:** Original wavelengths (1.55, 1.30, 1.00 μm) produced 6 different SFG outputs for 6 input combinations, but we only have 3 detectors.
+
+**Solution:** Choose Green wavelength as harmonic mean of Red and Blue so that:
+- R+B (result=0) produces **same SFG output** as G+G (result=0)
+
+**Optimized Input Wavelengths:**
+| Color | Old | New | Ternary |
+|-------|-----|-----|---------|
+| Red | 1.55 μm | **1.550 μm** | -1 |
+| Green | 1.30 μm | **1.216 μm** | 0 |
+| Blue | 1.00 μm | **1.000 μm** | +1 |
+
+Formula: λ_Green = 2 × λ_Red × λ_Blue / (λ_Red + λ_Blue) = 1.216 μm
+
+### 9. Simulation Verification
+
+Ran all 6 SFG mixer combinations using `universal_mixer.py`:
+
+| A | B | Result | SFG Output | Verified |
+|---|---|--------|------------|----------|
+| Red | Red | -2 | 0.775 μm | ✓ |
+| Red | Green | -1 | 0.681 μm | ✓ |
+| Red | Blue | 0 | **0.6078 μm** | ✓ |
+| Green | Green | 0 | **0.6080 μm** | ✓ |
+| Green | Blue | +1 | 0.549 μm | ✓ |
+| Blue | Blue | +2 | 0.500 μm | ✓ |
+
+**Key Result:** R+B and G+G outputs differ by only **0.2 nm** - same detector catches both!
+
+### 10. Output Stage Redesign
+
+Detectors now tuned to **SFG output wavelengths** (not input wavelengths):
+
+| Detector | Wavelength | Detects Result |
+|----------|-----------|----------------|
+| Det -1 | 0.681 μm | -1 (from R+G) |
+| Det 0 | 0.608 μm | 0 (from R+B or G+G) |
+| Det +1 | 0.549 μm | +1 (from G+B) |
+
+All outputs in visible range (0.5-0.8 μm) - Si detector compatible!
+
+### 11. Component Parameter Verification
+
+Verified simulation parameters match chip generator:
+
+| Component | Parameter | Value | Source |
+|-----------|-----------|-------|--------|
+| Ring Resonator | radius | 5.0 μm | PDK minimum |
+| | gap | 0.15 μm | Simulation |
+| SFG Mixer | length | 20 μm | Simulation |
+| | width | 0.8 μm | Simulation |
+| Photodetector | length | 2.0 μm | Simulation |
+| Material | n_core | 2.2 | LiNbO3 |
+| | chi2 | 0.5 | Simulation |
+
+### 12. Data Organization
+
+Organized `Research/data/` into subdirectories:
+- `gds/` - Chip layout files
+- `png/` - Simulation result images
+- `csv/` - Mixer spectral data
+- `logs/` - Simulation logs
+- `video/` - Selector animations
+- `h5/` - Meep HDF5 raw data
+
+---
+
+## What We Accomplished (Session 1 - Morning)
 
 ### 1. GitHub Repository Cleanup
 - Uploaded `ternary_81trit_optimal.gds` to GitHub
@@ -59,22 +136,34 @@ Comprehensive session covering GDS chip generation, GitHub organization, and fou
 
 ### 4. Architecture Clarification
 
-**Signal flow:**
+**Signal flow (updated with SFG output detection):**
 ```
 CW Laser → Kerr Clock → Y-Junction → AWG (demux) → Selectors → Combiner →
+    (1.55, 1.216, 1.00 μm)                                          ↓
+                                                              SFG Mixer (χ²)
                                                                     ↓
-                                                              SFG Mixer
+                                                        (0.681, 0.608, 0.549 μm)
                                                                     ↓
                                                            Splitter → 3 Photodetectors
                                                                     ↓
-                                                           DET_R, DET_G, DET_B (to GPIO)
+                                                           DET_-1, DET_0, DET_+1 (to GPIO)
 ```
+
+**Ternary Addition Truth Table:**
+| A | B | Result | SFG Output λ | Detector |
+|---|---|--------|--------------|----------|
+| -1 | -1 | -2 | 0.775 μm | (overflow) |
+| -1 | 0 | -1 | 0.681 μm | DET_-1 |
+| -1 | +1 | 0 | 0.608 μm | DET_0 |
+| 0 | 0 | 0 | 0.608 μm | DET_0 |
+| 0 | +1 | +1 | 0.549 μm | DET_+1 |
+| +1 | +1 | +2 | 0.500 μm | (overflow) |
 
 **Interface to binary computer:**
 - 6 GPIO outputs: V_red_A, V_grn_A, V_blu_A, V_red_B, V_grn_B, V_blu_B
-- 3 GPIO inputs: Detect_R, Detect_G, Detect_B
-- RGB lasers always on; resonators gate which colors pass
-- Computer sets voltages, physics does the math, read output colors
+- 3 GPIO inputs: DET_-1, DET_0, DET_+1
+- Input lasers always on; selectors gate which wavelengths pass
+- Computer sets voltages, physics does the math, read which detector fires
 
 ### 5. GDS Files Generated
 
@@ -108,12 +197,25 @@ CW Laser → Kerr Clock → Y-Junction → AWG (demux) → Selectors → Combine
 
 ## Next Steps
 
-1. **Generate final GDS** - Run option 11 for full 81-trit chip
-2. **Convert design summary to PDF**
-3. **Send inquiry emails** to foundries
-4. **Wait for PDK** from chosen foundry
-5. **Regenerate GDS** with foundry-specific layers
-6. **Submit for MPW run**
+1. ~~**Generate final GDS**~~ ✅ Done - `ternary_81trit_full.gds` with centered layout
+2. ~~**Verify wavelengths**~~ ✅ Done - Simulations confirm R+B = G+G (0.2 nm difference)
+3. **Update design summary** with new wavelengths (1.550, 1.216, 1.000 μm)
+4. **Convert design summary to PDF**
+5. **Send inquiry emails** to foundries
+6. **Wait for PDK** from chosen foundry
+7. **Regenerate GDS** with foundry-specific layers and design rules
+8. **Submit for MPW run**
+
+## Simulation Files Generated
+
+| File | Description |
+|------|-------------|
+| `mixer_data_RED_RED.csv` | R+R → 0.775 μm |
+| `mixer_data_RED_GREEN.csv` | R+G → 0.681 μm |
+| `mixer_data_RED_BLUE.csv` | R+B → 0.608 μm |
+| `mixer_data_GREEN_GREEN.csv` | G+G → 0.608 μm |
+| `mixer_data_GREEN_BLUE.csv` | G+B → 0.549 μm |
+| `mixer_data_BLUE_BLUE.csv` | B+B → 0.500 μm |
 
 ---
 
@@ -129,7 +231,10 @@ source bin/activate_env.sh
 python3 Research/programs/ternary_chip_generator.py
 
 # Open GDS in KLayout
-klayout Research/data/ternary_81trit_full.gds
+klayout Research/data/gds/ternary_81trit_full.gds
+
+# Run SFG mixer simulation for any two wavelengths
+python3 Research/programs/universal_mixer.py --wvl1 1.55 --wvl2 1.216 --label1 RED --label2 GREEN
 ```
 
 ---

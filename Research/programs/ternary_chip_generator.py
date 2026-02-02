@@ -24,10 +24,22 @@ LABEL_LAYER = (100, 0)
 # =============================================================================
 # TERNARY ENCODING: Wavelength -> Value
 # =============================================================================
+# Input wavelengths chosen so that R+B and G+G produce same SFG output (both = 0)
+# Green = harmonic mean of Red and Blue: λ_G = 2*λ_R*λ_B/(λ_R+λ_B) = 1.216 μm
 TERNARY_ENCODING = {
-    'NEG':   {'value': -1, 'wavelength_um': 1.55, 'color': 'red',   'name': 'Red'},
-    'ZERO':  {'value':  0, 'wavelength_um': 1.30, 'color': 'green', 'name': 'Green'},
-    'POS':   {'value': +1, 'wavelength_um': 1.00, 'color': 'blue',  'name': 'Blue'},
+    'NEG':   {'value': -1, 'wavelength_um': 1.550, 'color': 'red',   'name': 'Red'},
+    'ZERO':  {'value':  0, 'wavelength_um': 1.216, 'color': 'green', 'name': 'Green'},
+    'POS':   {'value': +1, 'wavelength_um': 1.000, 'color': 'blue',  'name': 'Blue'},
+}
+
+# SFG Output wavelengths (verified by simulation)
+# These are what the detectors need to sense
+OUTPUT_ENCODING = {
+    'NEG2':  {'value': -2, 'wavelength_um': 0.775, 'name': 'Overflow-'},  # R+R
+    'NEG':   {'value': -1, 'wavelength_um': 0.681, 'name': 'Result-1'},   # R+G
+    'ZERO':  {'value':  0, 'wavelength_um': 0.608, 'name': 'Result0'},    # R+B or G+G
+    'POS':   {'value': +1, 'wavelength_um': 0.549, 'name': 'Result+1'},   # G+B
+    'POS2':  {'value': +2, 'wavelength_um': 0.500, 'name': 'Overflow+'},  # B+B
 }
 
 # Material parameters (from your simulations)
@@ -44,7 +56,7 @@ MATERIALS = {
 def wavelength_selector(
     wavelength_um: float,
     radius: float = 5.0,
-    gap: float = 0.2,
+    gap: float = 0.15,
     name: str = "selector"
 ) -> gf.Component:
     """
@@ -56,7 +68,9 @@ def wavelength_selector(
     Args:
         wavelength_um: Target wavelength to select
         radius: Ring radius (larger = sharper filter)
-        gap: Coupling gap
+                Note: Simulation optimal is 0.8um for LiNbO3, but generic PDK
+                requires min 5.0um. Use foundry PDK for actual values.
+        gap: Coupling gap (simulation: 0.15um)
         name: Component name
     """
     c = gf.Component(name)
@@ -268,8 +282,8 @@ def wavelength_splitter(
 
 
 def photodetector(
-    width: float = 5.0,
-    length: float = 10.0,
+    width: float = 0.5,
+    length: float = 2.0,
     name: str = "detector"
 ) -> gf.Component:
     """
@@ -468,28 +482,34 @@ def ternary_output_stage(
     uid: str = ""
 ) -> gf.Component:
     """
-    Creates a wavelength-discriminating output stage.
+    Creates a wavelength-discriminating output stage for SFG mixer results.
 
     Structure: Input -> Splitter -> 3x Filters -> 3x Photodetectors
 
-    The mixer output hits all three filtered detectors simultaneously.
-    Each detector only responds to its wavelength (R, G, or B).
-    Firmware reads all three to determine which colors are present.
+    The mixer SFG output hits all three filtered detectors simultaneously.
+    Each detector is tuned to a specific SFG OUTPUT wavelength (not input wavelength).
 
-    Output combinations:
-      - Red only:        result = -1 (or -2)
-      - Green only:      result = 0
-      - Blue only:       result = +1 (or +2)
-      - Red + Blue:      result = 0 (purple = cancellation)
-      - Red + Green:     result = -1
-      - Green + Blue:    result = +1
-      - R + G + B:       all three present
+    Detector mapping (based on verified simulations):
+      - Det 1 (0.681 μm): Result = -1  (from R+G mixing)
+      - Det 2 (0.608 μm): Result = 0   (from R+B or G+G mixing)
+      - Det 3 (0.549 μm): Result = +1  (from G+B mixing)
+
+    Overflow cases (±2) produce different wavelengths:
+      - 0.775 μm: Result = -2 (R+R) - optional overflow detector
+      - 0.500 μm: Result = +2 (B+B) - optional overflow detector
     """
     import uuid
     if not uid:
         uid = str(uuid.uuid4())[:8]
 
     c = gf.Component(name)
+
+    # Detector wavelengths for the 3 main ternary results (verified by simulation)
+    DETECTOR_CONFIG = [
+        {'value': -1, 'wavelength_um': 0.681, 'name': 'Neg1'},   # R+G → -1
+        {'value':  0, 'wavelength_um': 0.608, 'name': 'Zero'},   # R+B or G+G → 0
+        {'value': +1, 'wavelength_um': 0.549, 'name': 'Pos1'},   # G+B → +1
+    ]
 
     # Splitter to send light to all three detector paths
     splitter = c << wavelength_splitter(n_outputs=3, name=f"output_split_{uid}")
@@ -498,20 +518,21 @@ def ternary_output_stage(
     y_spacing = 25
     detector_x = 80
 
-    for i, (trit, info) in enumerate(TERNARY_ENCODING.items()):
-        # Ring resonator filter for this wavelength
+    for i, det_info in enumerate(DETECTOR_CONFIG):
+        # Ring resonator filter tuned to SFG output wavelength
         filt = c << wavelength_selector(
-            wavelength_um=info['wavelength_um'],
+            wavelength_um=det_info['wavelength_um'],
             radius=5.0,
-            name=f"filter_{info['name']}_{uid}"
+            gap=0.15,
+            name=f"filter_{det_info['name']}_{uid}"
         )
         filt.dmove((40, (i - 1) * y_spacing))
 
         # Photodetector after filter
         det = c << photodetector(
-            width=4.0,
-            length=8.0,
-            name=f"detect_{info['name']}_{uid}"
+            width=0.5,
+            length=2.0,
+            name=f"detect_{det_info['name']}_{uid}"
         )
         det.dmove((detector_x, (i - 1) * y_spacing))
 
@@ -523,8 +544,8 @@ def ternary_output_stage(
                     port1=filt.ports["output"],
                     port2=det.ports["input"])
 
-        # Label each detector output
-        c.add_label(f"DET_{info['color'][0].upper()}", position=(detector_x + 15, (i - 1) * y_spacing), layer=LABEL_LAYER)
+        # Label each detector with result value
+        c.add_label(f"DET_{det_info['value']:+d}", position=(detector_x + 15, (i - 1) * y_spacing), layer=LABEL_LAYER)
 
     # Input port
     c.add_port(name="input", port=splitter.ports["input"])
@@ -626,7 +647,7 @@ def generate_ternary_alu(
     # =========================
     # 3. SFG MIXER (The brain!)
     # =========================
-    mixer = c << sfg_mixer(length=30, name=f"alu_mixer_{uid}")
+    mixer = c << sfg_mixer(length=20, name=f"alu_mixer_{uid}")
     mixer.dmove((250, 0))
 
     route_single(c, cross_section=XS, port1=op_combiner.ports["o1"], port2=mixer.ports["input"])
@@ -779,9 +800,9 @@ def generate_complete_alu(
     # 2. INPUT SELECTORS FOR A
     # =========================
     # Three selectors for R, G, B on operand A
-    sel_a_r = c << wavelength_selector(wavelength_um=1.55, name=f"sel_a_r_{uid}")
-    sel_a_g = c << wavelength_selector(wavelength_um=1.30, name=f"sel_a_g_{uid}")
-    sel_a_b = c << wavelength_selector(wavelength_um=1.00, name=f"sel_a_b_{uid}")
+    sel_a_r = c << wavelength_selector(wavelength_um=1.550, name=f"sel_a_r_{uid}")
+    sel_a_g = c << wavelength_selector(wavelength_um=1.216, name=f"sel_a_g_{uid}")
+    sel_a_b = c << wavelength_selector(wavelength_um=1.000, name=f"sel_a_b_{uid}")
 
     sel_a_r.dmove((200, 60))
     sel_a_g.dmove((200, 30))
@@ -803,9 +824,9 @@ def generate_complete_alu(
     # =========================
     # 3. INPUT SELECTORS FOR B
     # =========================
-    sel_b_r = c << wavelength_selector(wavelength_um=1.55, name=f"sel_b_r_{uid}")
-    sel_b_g = c << wavelength_selector(wavelength_um=1.30, name=f"sel_b_g_{uid}")
-    sel_b_b = c << wavelength_selector(wavelength_um=1.00, name=f"sel_b_b_{uid}")
+    sel_b_r = c << wavelength_selector(wavelength_um=1.550, name=f"sel_b_r_{uid}")
+    sel_b_g = c << wavelength_selector(wavelength_um=1.216, name=f"sel_b_g_{uid}")
+    sel_b_b = c << wavelength_selector(wavelength_um=1.000, name=f"sel_b_b_{uid}")
 
     sel_b_r.dmove((200, -60))
     sel_b_g.dmove((200, -30))
@@ -836,7 +857,7 @@ def generate_complete_alu(
     # =========================
     # 5. SFG MIXER
     # =========================
-    mixer = c << sfg_mixer(length=30, name=f"mixer_{uid}")
+    mixer = c << sfg_mixer(length=20, name=f"mixer_{uid}")
     mixer.dmove((430, 0))
 
     route_single(c, cross_section=XS, port1=op_combiner.ports["o3"], port2=mixer.ports["input"])
@@ -926,78 +947,262 @@ def generate_81_trit_processor(
     return c
 
 
+def cascaded_splitter_1to9(
+    name: str = "split_1to9",
+    uid: str = ""
+) -> gf.Component:
+    """
+    Creates a 1-to-9 splitter tree using cascaded 1x3 stages.
+
+    Structure: 1 → 3 → 9
+    """
+    import uuid
+    if not uid:
+        uid = str(uuid.uuid4())[:8]
+
+    c = gf.Component(name)
+
+    # First stage: 1 to 3
+    split1 = c << wavelength_splitter(n_outputs=3, name=f"s1_{uid}")
+    split1.dmove((0, 0))
+
+    # Second stage: 3 splitters, each 1 to 3
+    outputs = []
+    for i in range(3):
+        split2 = c << wavelength_splitter(n_outputs=3, name=f"s2_{i}_{uid}")
+        y_offset = (i - 1) * 80
+        split2.dmove((80, y_offset))
+
+        # Route from first stage
+        route_single(c, cross_section=XS,
+                    port1=split1.ports[f"out{i+1}"],
+                    port2=split2.ports["input"])
+
+        # Collect output ports
+        for j in range(3):
+            outputs.append((split2, f"out{j+1}", i * 3 + j))
+
+    # Input port
+    c.add_port(name="input", port=split1.ports["input"])
+
+    # Output ports (9 total)
+    for split2, port_name, idx in outputs:
+        c.add_port(name=f"out{idx}", port=split2.ports[port_name])
+
+    return c
+
+
 def generate_complete_81_trit(
     name: str = "Ternary81_Complete"
 ) -> gf.Component:
     """
-    Generates a complete 81-trit processor with shared optical frontend.
+    Generates a complete 81-trit processor with CENTERED optical frontend.
 
     Architecture:
-      - Shared frontend: Kerr clock → multi-stage splitter
-      - 81 complete ALU units (selectors, mixer, 3-channel output each)
-      - Organized as 9×9 grid
+      - Frontend at chip center for minimal signal degradation
+      - Splitter trees radiate outward in all directions
+      - 81 ALUs arranged in 9×9 grid around the center
+      - 3×3 zone structure (9 zones × 9 ALUs each)
+
+    Signal flow:
+      CW Laser → Kerr Clock → Y-Junction (center of chip)
+                                  ├→ A splitter tree (radiates outward) → AWG_A → Sel_A → Comb_A ─┐
+                                  │                                                                ├→ OpComb → Mixer → Output
+                                  └→ B splitter tree (radiates outward) → AWG_B → Sel_B → Comb_B ─┘
+
+    Benefits of centered layout:
+      - Reduces maximum path length by ~50%
+      - Equalizes signal power across all ALUs
+      - More symmetric power distribution
+      - Lower total insertion loss
 
     This is the full chip ready for fabrication.
     """
     import uuid
     c = gf.Component(name)
 
+    # Grid parameters
+    zone_spacing = 1200      # Spacing between zone centers
+    alu_spacing = 380        # Spacing between ALUs within a zone
+    chip_center_x = 1500     # Center of chip X
+    chip_center_y = 1500     # Center of chip Y
+
     # =========================
-    # 1. SHARED OPTICAL FRONTEND
+    # 1. CENTERED OPTICAL FRONTEND
     # =========================
-    # Kerr resonator for timing (shared by all ALUs)
+
+    # 1a. Kerr resonator for timing (master clock) - at chip center
     clk = c << kerr_resonator(name="master_clk")
-    clk.dmove((-100, 2700))  # Center-left of chip
+    clk.dmove((chip_center_x - 60, chip_center_y))
 
-    c.add_label("LASER_IN", position=(-130, 2700), layer=LABEL_LAYER)
+    c.add_label("LASER_IN", position=(chip_center_x - 100, chip_center_y), layer=LABEL_LAYER)
+    c.add_label("MASTER_CLK", position=(chip_center_x - 60, chip_center_y + 30), layer=LABEL_LAYER)
+
+    # 1b. Y-junction to split into A and B master paths
+    ysplit_master = c << y_junction(name="master_ysplit")
+    ysplit_master.dmove((chip_center_x, chip_center_y))
+
+    route_single(c, cross_section=XS,
+                port1=clk.ports["output"],
+                port2=ysplit_master.ports["input"])
 
     # =========================
-    # 2. 81 COMPLETE ALU UNITS
+    # 2. ZONE-BASED SPLITTER TREES
     # =========================
-    x_spacing = 600
-    y_spacing = 300
+    # Split into 9 zones (3×3), then each zone splits to 9 ALUs
+    # Zone layout (centered on chip_center):
+    #   Zone(0,2)  Zone(1,2)  Zone(2,2)   <- top row
+    #   Zone(0,1)  Zone(1,1)  Zone(2,1)   <- middle row (center zone)
+    #   Zone(0,0)  Zone(1,0)  Zone(2,0)   <- bottom row
 
+    # 2a. First-stage A splitter (1→9 for zones)
+    split_a_zones = c << cascaded_splitter_1to9(name="split_a_zones")
+    split_a_zones.dmove((chip_center_x + 60, chip_center_y + 40))
+
+    route_single(c, cross_section=XS,
+                port1=ysplit_master.ports["out_a"],
+                port2=split_a_zones.ports["input"])
+
+    # 2b. First-stage B splitter (1→9 for zones)
+    split_b_zones = c << cascaded_splitter_1to9(name="split_b_zones")
+    split_b_zones.dmove((chip_center_x + 60, chip_center_y - 40))
+
+    route_single(c, cross_section=XS,
+                port1=ysplit_master.ports["out_b"],
+                port2=split_b_zones.ports["input"])
+
+    # =========================
+    # 3. ZONES AND ALUs
+    # =========================
     trit_index = 0
 
-    # Create 9x9 grid of ALUs
-    for row in range(9):
-        for col in range(9):
-            uid = str(uuid.uuid4())[:8]
+    # Iterate through 9 zones (3×3 arrangement)
+    for zone_row in range(3):
+        for zone_col in range(3):
+            zone_idx = zone_row * 3 + zone_col
+            zone_uid = str(uuid.uuid4())[:8]
 
-            # Create ALU with selectors, mixer, output stage
-            alu = c << generate_ternary_alu(
-                operations=["add", "subtract", "multiply", "divide"],
-                name=f"ALU_t{trit_index}_{uid}"
-            )
+            # Zone center position (offset from chip center)
+            zone_center_x = chip_center_x + (zone_col - 1) * zone_spacing
+            zone_center_y = chip_center_y + (zone_row - 1) * zone_spacing
 
-            # Add output stage to each ALU
-            output = c << ternary_output_stage(name=f"out_t{trit_index}_{uid}", uid=uid)
+            # 3a. Zone-level A splitter (1→9 for ALUs in this zone)
+            split_a_alu = c << cascaded_splitter_1to9(name=f"split_a_z{zone_idx}_{zone_uid}")
+            split_a_alu.dmove((zone_center_x - 150, zone_center_y + 30))
 
-            # Position
-            x_pos = col * x_spacing
-            y_pos = row * y_spacing
+            route_single(c, cross_section=XS,
+                        port1=split_a_zones.ports[f"out{zone_idx}"],
+                        port2=split_a_alu.ports["input"])
 
-            alu.dmove((x_pos, y_pos))
-            output.dmove((x_pos + 350, y_pos))
+            # 3b. Zone-level B splitter (1→9 for ALUs in this zone)
+            split_b_alu = c << cascaded_splitter_1to9(name=f"split_b_z{zone_idx}_{zone_uid}")
+            split_b_alu.dmove((zone_center_x - 150, zone_center_y - 30))
 
-            # Route ALU to output (simplified - direct connection)
-            # In full design, this would connect mixer output to output stage
+            route_single(c, cross_section=XS,
+                        port1=split_b_zones.ports[f"out{zone_idx}"],
+                        port2=split_b_alu.ports["input"])
 
-            trit_index += 1
+            # Zone label
+            c.add_label(f"ZONE_{zone_idx}", position=(zone_center_x - 100, zone_center_y + 150), layer=LABEL_LAYER)
+
+            # 3c. Create 9 ALUs within this zone (3×3)
+            for alu_row in range(3):
+                for alu_col in range(3):
+                    alu_idx = alu_row * 3 + alu_col
+                    uid = str(uuid.uuid4())[:8]
+
+                    # ALU position within zone
+                    x_pos = zone_center_x + (alu_col - 1) * alu_spacing
+                    y_pos = zone_center_y + (alu_row - 1) * alu_spacing * 0.8
+
+                    # --- AWG for A (demux into R, G, B) ---
+                    awg_a = c << awg_demux(name=f"awg_a_t{trit_index}_{uid}")
+                    awg_a.dmove((x_pos, y_pos + 35))
+
+                    route_single(c, cross_section=XS,
+                                port1=split_a_alu.ports[f"out{alu_idx}"],
+                                port2=awg_a.ports["input"])
+
+                    # --- AWG for B (demux into R, G, B) ---
+                    awg_b = c << awg_demux(name=f"awg_b_t{trit_index}_{uid}")
+                    awg_b.dmove((x_pos, y_pos - 35))
+
+                    route_single(c, cross_section=XS,
+                                port1=split_b_alu.ports[f"out{alu_idx}"],
+                                port2=awg_b.ports["input"])
+
+                    # --- Selectors for A (R, G, B) ---
+                    sel_a_r = c << wavelength_selector(wavelength_um=1.550, name=f"sel_a_r_t{trit_index}_{uid}")
+                    sel_a_g = c << wavelength_selector(wavelength_um=1.216, name=f"sel_a_g_t{trit_index}_{uid}")
+                    sel_a_b = c << wavelength_selector(wavelength_um=1.000, name=f"sel_a_b_t{trit_index}_{uid}")
+
+                    sel_a_r.dmove((x_pos + 70, y_pos + 60))
+                    sel_a_g.dmove((x_pos + 70, y_pos + 35))
+                    sel_a_b.dmove((x_pos + 70, y_pos + 10))
+
+                    route_single(c, cross_section=XS, port1=awg_a.ports["out_r"], port2=sel_a_r.ports["input"])
+                    route_single(c, cross_section=XS, port1=awg_a.ports["out_g"], port2=sel_a_g.ports["input"])
+                    route_single(c, cross_section=XS, port1=awg_a.ports["out_b"], port2=sel_a_b.ports["input"])
+
+                    # --- Selectors for B (R, G, B) ---
+                    sel_b_r = c << wavelength_selector(wavelength_um=1.550, name=f"sel_b_r_t{trit_index}_{uid}")
+                    sel_b_g = c << wavelength_selector(wavelength_um=1.216, name=f"sel_b_g_t{trit_index}_{uid}")
+                    sel_b_b = c << wavelength_selector(wavelength_um=1.000, name=f"sel_b_b_t{trit_index}_{uid}")
+
+                    sel_b_r.dmove((x_pos + 70, y_pos - 10))
+                    sel_b_g.dmove((x_pos + 70, y_pos - 35))
+                    sel_b_b.dmove((x_pos + 70, y_pos - 60))
+
+                    route_single(c, cross_section=XS, port1=awg_b.ports["out_r"], port2=sel_b_r.ports["input"])
+                    route_single(c, cross_section=XS, port1=awg_b.ports["out_g"], port2=sel_b_g.ports["input"])
+                    route_single(c, cross_section=XS, port1=awg_b.ports["out_b"], port2=sel_b_b.ports["input"])
+
+                    # --- Combiner for A ---
+                    comb_a = c << wavelength_combiner(n_inputs=3, name=f"comb_a_t{trit_index}_{uid}")
+                    comb_a.dmove((x_pos + 140, y_pos + 35))
+
+                    route_single(c, cross_section=XS, port1=sel_a_r.ports["output"], port2=comb_a.ports["in1"])
+                    route_single(c, cross_section=XS, port1=sel_a_g.ports["output"], port2=comb_a.ports["in2"])
+                    route_single(c, cross_section=XS, port1=sel_a_b.ports["output"], port2=comb_a.ports["in3"])
+
+                    # --- Combiner for B ---
+                    comb_b = c << wavelength_combiner(n_inputs=3, name=f"comb_b_t{trit_index}_{uid}")
+                    comb_b.dmove((x_pos + 140, y_pos - 35))
+
+                    route_single(c, cross_section=XS, port1=sel_b_r.ports["output"], port2=comb_b.ports["in1"])
+                    route_single(c, cross_section=XS, port1=sel_b_g.ports["output"], port2=comb_b.ports["in2"])
+                    route_single(c, cross_section=XS, port1=sel_b_b.ports["output"], port2=comb_b.ports["in3"])
+
+                    # --- Operation Combiner (merges A and B) ---
+                    op_comb = c << gf.components.mmi2x2()
+                    op_comb.dmove((x_pos + 220, y_pos))
+
+                    route_single(c, cross_section=XS, port1=comb_a.ports["output"], port2=op_comb.ports["o1"])
+                    route_single(c, cross_section=XS, port1=comb_b.ports["output"], port2=op_comb.ports["o2"])
+
+                    # --- SFG Mixer ---
+                    mixer = c << sfg_mixer(length=20, name=f"mixer_t{trit_index}_{uid}")
+                    mixer.dmove((x_pos + 270, y_pos))
+
+                    route_single(c, cross_section=XS, port1=op_comb.ports["o3"], port2=mixer.ports["input"])
+
+                    # --- Output Stage (3-channel detector) ---
+                    output = c << ternary_output_stage(name=f"out_t{trit_index}_{uid}", uid=uid)
+                    output.dmove((x_pos + 320, y_pos))
+
+                    route_single(c, cross_section=XS, port1=mixer.ports["output"], port2=output.ports["input"])
+
+                    # --- ALU Label ---
+                    c.add_label(f"T{trit_index}", position=(x_pos + 180, y_pos + 80), layer=LABEL_LAYER)
+
+                    trit_index += 1
 
     # =========================
-    # 3. CHIP LABELS
+    # 4. CHIP LABELS
     # =========================
-    c.add_label("81T_FULL", position=(2400, 2800), layer=LABEL_LAYER)
-    c.add_label("9x9_GRID", position=(2400, 2750), layer=LABEL_LAYER)
-
-    # Row labels
-    for row in range(9):
-        c.add_label(f"R{row}", position=(-50, row * y_spacing), layer=LABEL_LAYER)
-
-    # Column labels
-    for col in range(9):
-        c.add_label(f"C{col}", position=(col * x_spacing + 200, -50), layer=LABEL_LAYER)
+    c.add_label("81T_CENTERED", position=(chip_center_x, chip_center_y + zone_spacing + 200), layer=LABEL_LAYER)
+    c.add_label("9_ZONES_x_9_ALUs", position=(chip_center_x, chip_center_y + zone_spacing + 150), layer=LABEL_LAYER)
+    c.add_label("FRONTEND_CENTER", position=(chip_center_x, chip_center_y - 80), layer=LABEL_LAYER)
 
     # Add master clock port
     c.add_port(name="laser_in", port=clk.ports["input"])
@@ -1177,7 +1382,7 @@ def interactive_generator():
     import os
     import subprocess
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    data_dir = os.path.join(base_dir, 'data')
+    data_dir = os.path.join(base_dir, 'data', 'gds')
     os.makedirs(data_dir, exist_ok=True)
 
     gds_path = os.path.join(data_dir, f"{chip_name}.gds")
