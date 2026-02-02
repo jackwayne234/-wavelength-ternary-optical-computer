@@ -287,7 +287,8 @@ def photodetector(
 
 
 def ternary_output_stage(
-    name: str = "output_stage"
+    name: str = "output_stage",
+    uid: str = ""
 ) -> gf.Component:
     """
     Creates a wavelength-discriminating output stage.
@@ -307,10 +308,14 @@ def ternary_output_stage(
       - Green + Blue:    result = +1
       - R + G + B:       all three present
     """
+    import uuid
+    if not uid:
+        uid = str(uuid.uuid4())[:8]
+
     c = gf.Component(name)
 
     # Splitter to send light to all three detector paths
-    splitter = c << wavelength_splitter(n_outputs=3, name=f"output_split")
+    splitter = c << wavelength_splitter(n_outputs=3, name=f"output_split_{uid}")
 
     # Three filtered detector channels
     y_spacing = 25
@@ -321,7 +326,7 @@ def ternary_output_stage(
         filt = c << wavelength_selector(
             wavelength_um=info['wavelength_um'],
             radius=5.0,
-            name=f"filter_{info['name']}"
+            name=f"filter_{info['name']}_{uid}"
         )
         filt.dmove((40, (i - 1) * y_spacing))
 
@@ -329,7 +334,7 @@ def ternary_output_stage(
         det = c << photodetector(
             width=4.0,
             length=8.0,
-            name=f"detect_{info['name']}"
+            name=f"detect_{info['name']}_{uid}"
         )
         det.dmove((detector_x, (i - 1) * y_spacing))
 
@@ -453,7 +458,7 @@ def generate_ternary_alu(
     # =========================
     # 4. OUTPUT DETECTION (3-channel)
     # =========================
-    output_stage = c << ternary_output_stage(name=f"output_{uid}")
+    output_stage = c << ternary_output_stage(name=f"output_{uid}", uid=uid)
     output_stage.dmove((300, 0))
 
     route_single(c, cross_section=XS, port1=mixer.ports["output"], port2=output_stage.ports["input"])
