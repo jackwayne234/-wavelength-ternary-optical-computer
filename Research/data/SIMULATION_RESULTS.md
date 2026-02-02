@@ -1,0 +1,135 @@
+# DIY Polymer Waveguide Simulation Results
+
+**Date**: February 1, 2026
+**Purpose**: Evaluate feasibility of DIY-accessible materials for Phase 4 optical chip fabrication
+
+## Summary
+
+These simulations compare LiNbO3 (requires HF etching) against polymer alternatives that can be fabricated with standard lithography or laser ablation.
+
+### Key Findings
+
+1. **Passive components (routing, splitting, wavelength selection)**: Polymers work excellently
+2. **Nonlinear mixing (SFG)**: Poled polymers achieve 5-15% of LiNbO3 efficiency - sufficient for proof-of-concept
+3. **KDP crystals**: Not viable due to low χ² and phase mismatch issues
+
+## Simulation 1: Ring Resonator Wavelength Selector
+
+**File**: `polymer_selector_comparison.png`
+**Script**: `../programs/polymer_selector.py`
+**Log**: `polymer_selector_log.txt`
+
+Tests whether polymer waveguides can perform wavelength selection (filtering RGB channels).
+
+### Results
+
+| Material | n_core | Index Contrast | Ring Radius | Fits 12" Chip? |
+|----------|--------|----------------|-------------|----------------|
+| LiNbO3 / Air | 2.20 | 1.200 | 0.8 μm | Yes (199,171 rings) |
+| SU-8 / Air | 1.57 | 0.570 | 3.2 μm | Yes (48,292 rings) |
+| PMMA / Air | 1.49 | 0.490 | 4.4 μm | Yes (34,496 rings) |
+| Poled DR1-PMMA / Air | 1.50 | 0.500 | 4.4 μm | Yes (34,711 rings) |
+
+### Conclusion
+
+All polymer materials produce functional ring resonators. Lower refractive index contrast requires larger ring radii, but this is trivial at 12" chip scale. **Passive routing is fully feasible with DIY polymers.**
+
+---
+
+## Simulation 2: SFG Material Comparison
+
+**File**: `polymer_sfg_comparison.png` (partial - DAST simulation interrupted)
+**Script**: `../programs/polymer_sfg_comparison.py`
+**Log**: `polymer_sfg_comparison_log.txt`
+
+Tests sum-frequency generation (nonlinear mixing) efficiency across materials.
+
+### Results
+
+| Material | χ² (pm/V) | SFG Signal | DIY Feasible? | Relative to LiNbO3 |
+|----------|-----------|------------|---------------|-------------------|
+| LiNbO3 (baseline) | 30.0 | 3.63e-01 | No (requires HF) | 100% |
+| DR1-SU8 (poled) | 30.0 | 5.36e-02 | Yes | **15%** |
+| DR1-PMMA (poled) | 35.0 | 1.87e-02 | Yes | **5%** |
+| KDP crystal | 0.39 | 1.26e-03 | Yes | 0.3% |
+| DAST | 290.0 | (not completed) | No (hard to grow) | N/A |
+
+### Conclusion
+
+**Poled polymers (DR1-doped SU-8 or PMMA) are the best DIY option for nonlinear mixing.** They achieve 5-15% of LiNbO3 efficiency, which is detectable and sufficient for proof-of-concept demonstration.
+
+---
+
+## Simulation 3: KDP Length Scaling
+
+**File**: `kdp_length_scaling.png`
+**Script**: `../programs/polymer_sfg_comparison.py --kdp-scaling`
+**Log**: `kdp_scaling_log.txt`
+
+Tests whether longer KDP waveguides can compensate for low χ² coefficient.
+
+### Results
+
+| KDP Length | SFG Signal | Relative to LiNbO3 @ 20μm |
+|------------|------------|---------------------------|
+| 20 μm | 1.26e-03 | 0.35% |
+| 50 μm | 2.89e-03 | 0.80% |
+| 100 μm | 3.02e-03 | 0.83% |
+| 200 μm | 6.56e-04 | 0.18% |
+
+### Conclusion
+
+**KDP cannot compete with LiNbO3 or poled polymers.** The SFG signal initially increases with length but then drops at 200μm due to phase mismatch. Without quasi-phase matching (periodic poling), the generated signal oscillates and cancels out. Even at optimal length, KDP achieves less than 1% of LiNbO3 efficiency.
+
+---
+
+## Recommended DIY Phase 4 Approach
+
+Based on these simulations:
+
+1. **Waveguide routing**: SU-8 ridge waveguides with air cladding
+   - No etching required (SU-8 IS the waveguide)
+   - Pattern with DLP UV lithography or direct laser write
+
+2. **Nonlinear mixer**: DR1-doped SU-8 with electric field poling
+   - Dope SU-8 with Disperse Red 1 chromophore before spin coating
+   - Build poling apparatus: heating stage (100-150°C) + HV electrodes (50-100 V/μm)
+   - Expected efficiency: ~15% of LiNbO3
+
+3. **Skip KDP**: Despite being easy to grow, the low χ² makes it impractical
+
+4. **Avoid HF entirely**: The polymer approach eliminates the most dangerous chemical in the original Phase 4 plan
+
+---
+
+## Files in this Directory
+
+| File | Description |
+|------|-------------|
+| `polymer_selector_comparison.png` | Ring resonator response for different materials |
+| `polymer_selector_log.txt` | Full simulation output for selector comparison |
+| `kdp_length_scaling.png` | KDP SFG vs waveguide length |
+| `kdp_scaling_log.txt` | Full simulation output for KDP scaling |
+| `polymer_sfg_comparison_log.txt` | Partial SFG comparison (DAST interrupted) |
+
+## How to Reproduce
+
+```bash
+cd /path/to/Optical_computing
+
+# Activate environment with Meep
+source .mamba_env/bin/activate
+
+# Run polymer selector comparison
+python Research/programs/polymer_selector.py
+
+# Run SFG material comparison
+python Research/programs/polymer_sfg_comparison.py
+
+# Run KDP length scaling test
+python Research/programs/polymer_sfg_comparison.py --kdp-scaling
+```
+
+---
+
+*Generated by Meep FDTD simulations, February 2026*
