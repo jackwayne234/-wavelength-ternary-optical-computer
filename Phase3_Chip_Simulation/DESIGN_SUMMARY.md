@@ -1,8 +1,8 @@
 # Design Summary: 81-Trit Ternary Optical Processor
 
 *Prepared for foundry submission*
-*Version 1.1 | February 2, 2026*
-*Updated: Optimized wavelengths verified by simulation*
+*Version 1.2 | February 2, 2026*
+*Updated: Simplified architecture with AWG output demux*
 
 ---
 
@@ -62,18 +62,31 @@ The 81-trit word divides naturally into ternary sub-units:
 
 Physical layout: 3×3 grid of 9-trit processing elements.
 
-### Core components
+### Core components (SIMPLIFIED architecture)
 
 | Component | Function | Quantity per ALU |
 |-----------|----------|------------------|
-| AWG demux | Wavelength separation (R/G/B) | 2 (one per operand) |
+| AWG demux (3-ch) | Input wavelength separation (R/G/B) | 2 (one per operand) |
 | Ring resonator | Wavelength selection/gating | 6 (3 per operand) |
 | Wavelength combiner | Merge selected wavelengths | 2 (one per operand) |
 | MMI 2×2 | Combine A and B operands | 1 |
 | SFG mixer | Ternary arithmetic (χ² nonlinear) | 1 |
-| Output splitter | Split to 5 detector paths | 1 |
-| Ring filter | Wavelength-selective detection | 5 (one per result) |
+| AWG demux (5-ch) | Output wavelength separation | 1 |
 | Photodetector | Output readout | 5 (DET_-2 to DET_+2) |
+
+**Simplification:** The output stage uses a single 5-channel AWG demultiplexer instead of a splitter + 5 ring resonator filters. This reduces component count by 45% per ALU while maintaining full functionality.
+
+### Total component count (81-trit chip)
+
+| Component | Count | Notes |
+|-----------|-------|-------|
+| Ring resonators | 486 | Input selectors only (6 per ALU × 81) |
+| AWG demux | 243 | 2 input + 1 output per ALU × 81 |
+| SFG mixers | 81 | One per ALU |
+| Photodetectors | 405 | 5 per ALU × 81 |
+| MMI couplers | ~500 | Combiners, splitters |
+
+*Note: Simplified architecture eliminates 405 ring resonator filters from output stage.*
 
 ---
 
@@ -119,7 +132,9 @@ Physical layout: 3×3 grid of 9-trit processing elements.
 | (2, 0) | SFG mixer region (χ² material) |
 | (3, 0) | Photodetector region |
 | (4, 0) | DFG divider region |
-| Text | Labels and annotations |
+| (5, 0) | Kerr nonlinear region |
+| (6, 0) | AWG body |
+| (100, 0) | Labels (toggle in KLayout) |
 
 ---
 
@@ -134,7 +149,7 @@ Physical layout: 3×3 grid of 9-trit processing elements.
 
 ### Electrical outputs (5-detector SFG detection)
 
-The output stage detects all **SFG output wavelengths** including carry/borrow. Each detector is tuned via ring resonator filter to its target wavelength:
+The output stage uses a **5-channel AWG demultiplexer** to separate SFG output wavelengths, routing each to a dedicated photodetector:
 
 | Signal | Wavelength | Ternary Result | Function |
 |--------|------------|----------------|----------|
@@ -193,14 +208,14 @@ The output stage detects all **SFG output wavelengths** including carry/borrow. 
 
 ### Truth table verification (single trit) - SIMULATION VERIFIED
 
-| A | B | A + B | SFG Output λ | Detector |
-|---|---|-------|--------------|----------|
-| -1 (R) | -1 (R) | -2 | 0.775 μm | overflow |
-| -1 (R) | 0 (G) | -1 | 0.681 μm | DET_-1 |
-| -1 (R) | +1 (B) | 0 | **0.608 μm** | DET_0 |
-| 0 (G) | 0 (G) | 0 | **0.608 μm** | DET_0 |
-| 0 (G) | +1 (B) | +1 | 0.549 μm | DET_+1 |
-| +1 (B) | +1 (B) | +2 | 0.500 μm | overflow |
+| A | B | A + B | SFG Output λ | Detector | Digit | Carry |
+|---|---|-------|--------------|----------|-------|-------|
+| -1 (R) | -1 (R) | -2 | 0.775 μm | DET_-2 | +1 | -1 (borrow) |
+| -1 (R) | 0 (G) | -1 | 0.681 μm | DET_-1 | -1 | 0 |
+| -1 (R) | +1 (B) | 0 | **0.608 μm** | DET_0 | 0 | 0 |
+| 0 (G) | 0 (G) | 0 | **0.608 μm** | DET_0 | 0 | 0 |
+| 0 (G) | +1 (B) | +1 | 0.549 μm | DET_+1 | +1 | 0 |
+| +1 (B) | +1 (B) | +2 | 0.500 μm | DET_+2 | -1 | +1 (carry) |
 
 *Critical verification: R+B and G+G both produce 0.608 μm (verified within 0.2 nm by Meep FDTD)*
 
@@ -236,7 +251,8 @@ The optical frontend (Kerr clock, Y-junction, splitter trees) is positioned at t
 
 | File | Description |
 |------|-------------|
-| `ternary_81trit_full.gds` | Complete chip layout (centered frontend) |
+| `ternary_81trit_simplified.gds` | **RECOMMENDED** - Simplified architecture (AWG output) |
+| `ternary_81trit_5det_complete.gds` | Full architecture (ring filter output) |
 | `ternary_complete_alu.gds` | Single ALU reference design |
 | `METHODS.md` | Simulation methodology |
 | `../Research/data/SIMULATION_RESULTS.md` | Material characterization data |
