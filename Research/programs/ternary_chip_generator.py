@@ -3413,7 +3413,7 @@ def interactive_generator():
     print("  8. Optical Backplane (Interconnect + Amplifiers)")
     print("\n=== COMPLETE SYSTEMS ===")
     print("  9. 81-Trit Universal ALU (ADD/SUB/MUL/DIV)")
-    print(" 10. Integrated System (ALU + IOC + RAM)")
+    print(" 10. AI ACCELERATOR (81×81 Systolic + Super IOC) [NEW]")
     print(" 11. AUTONOMOUS OPTICAL COMPUTER [COMPLETE]")
 
     choice = input("\nSelect template (1-11): ").strip()
@@ -3427,7 +3427,7 @@ def interactive_generator():
         print("  • ENCODE: Electronic ternary -> RGB wavelength optical")
         print("  • DECODE: 5-level photodetector -> electronic ternary + carry")
         print("  • BUFFER/SYNC: Timing between optical ALU and electronic control")
-        print("  • RAM ADAPTERS: Tier 1/2/3 memory interfaces")
+        print("  • NOTE: For AI workloads, use Super IOC instead (option 10)")
         print("\nInclude laser sources? (y/n): ", end="")
         include_lasers = input().strip().lower() == "y"
         print("Generating IOC module...")
@@ -3515,7 +3515,7 @@ def interactive_generator():
         print("  • EDFA amplifiers (+20dB) for signal regeneration")
         print("  • Tap points for add/drop at each slot")
         print("\nBackplane configuration:")
-        print("  1. Linear (4 OPU + 2 IOC + 4 IOA + Storage + RAM)")
+        print("  1. Linear (4 OPU + 2 IOC + 4 IOA + Storage)")
         print("  2. Central Clock (modules around Kerr clock) [RECOMMENDED]")
         print("  3. Mini (4 slots, compact)")
         bp_choice = input("Select (1/2/3) [2]: ").strip() or "2"
@@ -3558,54 +3558,76 @@ def interactive_generator():
         chip_name = "ternary_81trit_universal_alu"
     elif choice == "10":
         print("\n" + "="*60)
-        print("  INTEGRATED SYSTEM - ALU + IOC + RAM")
+        print("  AI ACCELERATOR - 81×81 Systolic Array + Super IOC")
         print("="*60)
-        print("\nGenerating complete integrated system...")
-        c = gf.Component("integrated_system")
-        alu = c << generate_81_trit_optical_carry(name='T81_ALU')
-        alu.dmove((0, 0))
-        ioc = c << ioc_module_complete(include_laser_sources=True)
-        ioc.dmove((-1000, 0))
-        c.add_label("INTEGRATED TERNARY OPTICAL SYSTEM", position=(0, 1500), layer=LABEL_LAYER)
-        c.add_label("81-Trit ALU + IOC + RAM Adapters", position=(0, 1450), layer=LABEL_LAYER)
-        chip = c
-        chip_name = "integrated_system"
+        print("\nFeatures:")
+        print("  • 81×81 Optical Systolic Array (6,561 PEs)")
+        print("  • 4.05 TMAC/s peak throughput @ 617 MHz")
+        print("  • Multi-domain: LINEAR / LOG / LOG-LOG")
+        print("  • Super IOC replaces traditional RAM")
+        print("  • Weight-stationary architecture")
+        print("  • NO EXTERNAL RAM REQUIRED!")
+        print("\nGenerating AI Accelerator...")
+        try:
+            from optical_systolic_array import optical_systolic_array_81x81
+            from super_ioc_module import super_ioc_module
+            c = gf.Component("ai_accelerator")
+            ioc = c << super_ioc_module()
+            ioc.dmove((0, 0))
+            array = c << optical_systolic_array_81x81()
+            array.dmove((2500, 200))
+            c.add_label("OPTICAL AI ACCELERATOR", position=(3500, 5000), layer=LABEL_LAYER)
+            c.add_label("81×81 Systolic (4.05 TMAC/s) + Super IOC (No RAM)", position=(3500, 4950), layer=LABEL_LAYER)
+            chip = c
+            chip_name = "ai_accelerator"
+        except ImportError as e:
+            print(f"Error importing modules: {e}")
+            print("Run optical_systolic_array.py and super_ioc_module.py first.")
+            return
     elif choice == "11":
         print("\n" + "="*60)
         print("  AUTONOMOUS OPTICAL COMPUTER")
-        print("  Complete Integrated System")
+        print("  Complete AI-Ready System")
         print("="*60)
         print("\nGenerating complete autonomous system with:")
-        print("  • 81-Trit Optical ALU")
+        print("  • 81×81 Systolic Array (6,561 PEs, 4.05 TMAC/s)")
+        print("  • Super IOC (replaces RAM - streaming architecture)")
         print("  • OPU Controller (the brain)")
-        print("  • IOC (electronic-optical conversion)")
         print("  • IOA System (Electronic, Network, Sensor)")
         print("  • Storage IOA (NVMe, DDR5, HBM)")
-        print("  • Optical Backplane (interconnect + amplifiers)")
-        print("\nThis may take a moment...")
+        print("  • Optical Backplane (interconnect + Kerr clock)")
+        print("\nThis may take a few minutes for the 81×81 array...")
         c = gf.Component("autonomous_optical_computer")
         # Generate all components
-        alu = generate_81_trit_optical_carry(name='T81_ALU')
+        try:
+            from optical_systolic_array import optical_systolic_array_81x81
+            from super_ioc_module import super_ioc_module
+            array = optical_systolic_array_81x81()
+            sioc = super_ioc_module()
+        except ImportError:
+            print("Using basic ALU instead of systolic array...")
+            array = generate_81_trit_optical_carry(name='T81_ALU')
+            sioc = ioc_module_complete(include_laser_sources=True, include_ioa_bus=True)
         opu = opu_controller()
-        ioc = ioc_module_complete(include_laser_sources=True, include_ioa_bus=True)
         ioa = ioa_system_complete()
         stor = storage_ioa()
-        bp = optical_backplane(n_opu_slots=1, n_ioc_slots=1, n_ioa_slots=2)
+        bp = backplane_central_clock(n_opu_slots=1, n_ioc_slots=1, n_ioa_slots=2)
         # Layout hierarchically
         bp_inst = c << bp
-        bp_inst.dmove((0, 3200))
+        bp_inst.dmove((0, 6000))
         ioa_inst = c << ioa
-        ioa_inst.dmove((0, 2800))
+        ioa_inst.dmove((0, 5500))
         stor_inst = c << stor
-        stor_inst.dmove((1400, 2800))
+        stor_inst.dmove((1400, 5500))
         opu_inst = c << opu
-        opu_inst.dmove((400, 2100))
-        ioc_inst = c << ioc
-        ioc_inst.dmove((300, 1400))
-        alu_inst = c << alu
-        alu_inst.dmove((0, 0))
-        c.add_label("AUTONOMOUS TERNARY OPTICAL COMPUTER", position=(700, 4600), layer=LABEL_LAYER)
-        c.add_label("ALU + OPU + IOC + IOA + Storage + Backplane", position=(700, 4550), layer=LABEL_LAYER)
+        opu_inst.dmove((400, 4800))
+        sioc_inst = c << sioc
+        sioc_inst.dmove((0, 2500))
+        array_inst = c << array
+        array_inst.dmove((2500, 0))
+        c.add_label("AUTONOMOUS OPTICAL AI COMPUTER", position=(3000, 8000), layer=LABEL_LAYER)
+        c.add_label("81×81 Systolic (4.05 TMAC/s) + Super IOC + Backplane", position=(3000, 7950), layer=LABEL_LAYER)
+        c.add_label("NO EXTERNAL RAM - STREAMING ARCHITECTURE", position=(3000, 7900), layer=LABEL_LAYER)
         chip = c
         chip_name = "autonomous_optical_computer"
     else:
