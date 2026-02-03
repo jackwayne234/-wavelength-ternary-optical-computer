@@ -551,4 +551,133 @@ klayout Research/data/gds/super_ioc_module.gds
 
 ---
 
+## ████████████████████████████████████████████████████████████████████████
+## █  ROUND TABLE ARCHITECTURE - CLARIFIED (Session 2, Feb 3 2026)        █
+## ████████████████████████████████████████████████████████████████████████
+
+### CRITICAL DESIGN PRINCIPLE
+
+**MINIMIZE DISTANCE FROM KERR CLOCK TO ALL COMPONENTS**
+
+The Kerr resonator generates the 617 MHz master clock. ALL components must receive this clock with minimal skew. Clock skew causes:
+- Synchronization errors in systolic array
+- Data corruption in streaming pipelines
+- Timing violations at domain boundaries
+
+**SOLUTION**: Kerr at EXACT CENTER, all components EQUIDISTANT in concentric rings.
+
+### Round Table Layout (Bird's Eye View)
+
+```
+                        ROUND TABLE - MAX CONFIG (8 SC)
+
+                                   IOA₀
+                                  SIOC₀
+                                   SC₀
+
+                 IOA₇                             IOA₁
+                SIOC₇                             SIOC₁
+                 SC₇                               SC₁
+
+
+
+      IOA₆                      ┌───────┐                      IOA₂
+     SIOC₆                      │ KERR  │                     SIOC₂
+      SC₆                       │617MHz │                       SC₂
+                                └───────┘
+
+
+                 SC₅                               SC₃
+                SIOC₅                             SIOC₃
+                 IOA₅                             IOA₃
+
+                                   SC₄
+                                  SIOC₄
+                                   IOA₄
+```
+
+### Concentric Ring Architecture
+
+| Ring | Component | Count | Distance from Kerr |
+|------|-----------|-------|--------------------|
+| **0 (CENTER)** | Kerr Clock | 1 | 0 (origin) |
+| **1** | Supercomputers (SC) | 1-8 | ~400 μm |
+| **2** | Super IOCs (SIOC) | 1-8 | ~650 μm |
+| **3 (OUTER)** | IOAs | 1-8 | ~850 μm |
+
+### Key Clarifications
+
+1. **SIOC Placement**: Super IOCs sit on the OUTSIDE of the supercomputers (Ring 2), not integrated into them.
+
+2. **IOA Placement**: IOAs sit on the OUTSIDE of the SIOCs (Ring 3), providing modular peripheral connectivity.
+
+3. **Backplane Role**: Connects all supercomputers via data bus ring, allowing them to work together OR operate independently.
+
+4. **Modular Configurations**:
+   | Config | Kerr | SC | SIOC | IOA | Use Case |
+   |--------|------|-----|------|-----|----------|
+   | MINIMUM | 1 | 1 | 1 | 1 | Dev kit / edge device |
+   | SMALL | 1 | 4 | 2 | 2 | Small cluster |
+   | MAXIMUM | 1 | 8 | 8 | 8 | Full supercomputer |
+
+5. **Operating Modes**:
+   - **8 Independent LLMs**: Each SC has own SIOC/IOA
+   - **Unified System**: All 8 SCs work together, 1 SIOC for inter-group communication
+   - **Hybrid**: Some SIOCs for networking, some for storage
+
+6. **Inter-Group Communication**: One SIOC per group handles connections to OTHER Round Table groups. IOAs determine physical medium (Ethernet, Fiber, Coax, NVMe, etc.)
+
+### Files Updated
+
+- `Research/programs/optical_backplane.py` - Added `round_table_backplane()` function
+- `Research/programs/ARCHITECTURE_NOTES.md` - Added Round Table section with emphasis
+
+### New GDS Files
+
+| File | Description |
+|------|-------------|
+| `round_table_minimum.gds` | 1 SC config (dev kit) |
+| `round_table_small.gds` | 4 SC config (small cluster) |
+| `round_table_maximum.gds` | 8 SC config (full supercomputer) |
+
+### Generate Commands
+
+```bash
+cd /home/jackwayne/Desktop/Optical_computing
+
+# Generate all Round Table configurations
+.mamba_env/bin/python3 Research/programs/optical_backplane.py
+
+# View in KLayout
+klayout Research/data/gds/round_table_maximum.gds
+```
+
+---
+
+## Three Computer Types
+
+The system now organizes into THREE distinct computer types:
+
+### 1. STANDARD COMPUTER
+- **Array**: 81×81 Systolic (6,561 PEs)
+- **TFLOPS**: ~4.0
+- **Use Case**: General ternary computing, research, education
+- **Config**: 1 Kerr + 1 SC + 1 SIOC + 1 IOA
+
+### 2. HOME AI
+- **Array**: 243×243 Systolic (59,049 PEs)
+- **WDM**: 8 channels (C-band)
+- **TFLOPS**: ~291 (3.5× RTX 4090)
+- **Use Case**: Edge inference, local LLMs, prosumer AI
+- **Config**: 1 Kerr + 1-4 SC + 1-2 SIOC + 1-2 IOA
+
+### 3. SUPERCOMPUTER
+- **Array**: 243×243 × 8 chips × 8 WDM
+- **PFLOPS**: ~2.33 (1.2× H100)
+- **Use Case**: Datacenter AI, training, HPC
+- **Config**: 1 Kerr + 8 SC + 8 SIOC + 8 IOA (Round Table MAX)
+- **Upgrade**: 24 WDM → 7.0 PFLOPS; 729×729 + 24 WDM → 63 PFLOPS
+
+---
+
 *Session with Claude Code - Opus 4.5*

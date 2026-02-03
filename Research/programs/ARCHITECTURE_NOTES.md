@@ -6,6 +6,125 @@ This document annotates the complete architecture of the 81-trit wavelength-divi
 
 ---
 
+# ████████████████████████████████████████████████████████████████████████████████
+# █                                                                              █
+# █                    ROUND TABLE ARCHITECTURE                                  █
+# █                    ========================                                  █
+# █                                                                              █
+# █   THE PRIMARY SYSTEM ARCHITECTURE FOR ALL CONFIGURATIONS                     █
+# █                                                                              █
+# ████████████████████████████████████████████████████████████████████████████████
+
+## CRITICAL DESIGN PRINCIPLE
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                             │
+│   ★★★ MINIMIZE DISTANCE FROM KERR CLOCK TO ALL COMPONENTS ★★★              │
+│                                                                             │
+│   The Kerr resonator generates the 617 MHz master clock that synchronizes   │
+│   the entire system. Clock skew between components causes:                  │
+│                                                                             │
+│     • Synchronization errors in systolic array operations                   │
+│     • Data corruption in streaming pipelines                                │
+│     • Timing violations at optical/electronic domain boundaries             │
+│     • Reduced effective throughput due to required guard bands              │
+│                                                                             │
+│   SOLUTION: Place Kerr at EXACT CENTER, all components EQUIDISTANT          │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+## Round Table Layout (Bird's Eye View)
+
+```
+                        ROUND TABLE - MAX CONFIG (8 SC)
+
+                                   IOA₀
+                                  SIOC₀
+                                   SC₀
+
+                 IOA₇                             IOA₁
+                SIOC₇                             SIOC₁
+                 SC₇                               SC₁
+
+
+
+      IOA₆                      ┌───────┐                      IOA₂
+     SIOC₆                      │ KERR  │                     SIOC₂
+      SC₆                       │617MHz │                       SC₂
+                                └───────┘
+
+
+                 SC₅                               SC₃
+                SIOC₅                             SIOC₃
+                 IOA₅                             IOA₃
+
+                                   SC₄
+                                  SIOC₄
+                                   IOA₄
+```
+
+## Concentric Ring Architecture
+
+| Ring | Component | Count | Purpose |
+|------|-----------|-------|---------|
+| **0 (CENTER)** | Kerr Clock | 1 | 617 MHz master timing - NEVER MOVES |
+| **1** | Supercomputers | 1-8 | Optical compute (systolic arrays) |
+| **2** | Super IOCs | 1-8 | Streaming interface (weights, activations, results) |
+| **3 (OUTER)** | IOAs | 1-8 | Peripheral adapters (Ethernet, Fiber, NVMe, etc.) |
+
+## Modular Configurations
+
+| Config | Kerr | SC | SIOC | IOA | Use Case |
+|--------|------|-----|------|-----|----------|
+| **MINIMUM** | 1 | 1 | 1 | 1 | Dev kit, edge device, testing |
+| **SMALL** | 1 | 4 | 2 | 2 | Small cluster, workstation |
+| **MAXIMUM** | 1 | 8 | 8 | 8 | Full supercomputer group |
+
+## Operating Modes
+
+The Round Table supports flexible operation:
+
+### Mode 1: 8 Independent LLMs
+- Each Supercomputer has its own SIOC and IOA
+- 8 separate inference engines
+- No inter-SC communication needed
+
+### Mode 2: Unified System
+- All 8 SCs work together via backplane data bus
+- Single SIOC handles inter-group communication
+- Remaining SIOCs connect to storage
+
+### Mode 3: Hybrid
+- Some SIOCs for networking (inter-group)
+- Some SIOCs for storage (NVMe arrays)
+- Flexible resource allocation
+
+## Inter-Group Communication
+
+Multiple Round Tables can be connected:
+
+```
+    GROUP A                              GROUP B
+    ┌────────────────────┐              ┌────────────────────┐
+    │  8 Supercomputers  │              │  8 Supercomputers  │
+    │  (Round Table)     │              │  (Round Table)     │
+    │        │           │              │        │           │
+    │     ┌──┴──┐        │              │     ┌──┴──┐        │
+    │     │SIOC │←───────┼──────────────┼─────│SIOC │        │
+    │     └──┬──┘        │   Fiber      │     └──┬──┘        │
+    │        │           │   Link       │        │           │
+    │   ┌────┴────┐      │              │   ┌────┴────┐      │
+    │   │   IOAs  │      │              │   │   IOAs  │      │
+    └───┼─────────┼──────┘              └───┼─────────┼──────┘
+        │         │                         │         │
+       ┌┴┐       ┌┴┐                       ┌┴┐       ┌┴┐
+     Fiber    Storage                   Ethernet   Storage
+```
+
+---
+
 ## System Overview
 
 ```

@@ -10,6 +10,37 @@
 
 > **Bypassing the Radix Economy Penalty in Optical Computing**
 
+---
+
+## Quick Navigation
+
+### Computer Tiers
+
+| Tier | Name | Performance | Location |
+|------|------|-------------|----------|
+| **1** | [Standard Computer](Research/programs/standard_computer/) | ~4 TFLOPS | Entry-level optical computing |
+| **2** | [Home AI](Research/programs/home_ai/) | ~291 TFLOPS (3.5x RTX 4090) | Consumer AI workstation |
+| **3** | [Supercomputer](Research/programs/supercomputer/) | ~2.33 PFLOPS (1.2x H100) | Data center / HPC |
+
+### Key Resources
+
+| Resource | Path | Description |
+|----------|------|-------------|
+| Session Notes | [docs/session_notes/](docs/session_notes/) | Development session documentation |
+| GDS Output | [Research/data/gds/](Research/data/gds/) | GDSII layout files for fabrication |
+| Simulations | [Research/programs/simulations/](Research/programs/simulations/) | FDTD and photonic simulations |
+| Architecture Notes | [Research/programs/ARCHITECTURE_NOTES.md](Research/programs/ARCHITECTURE_NOTES.md) | Detailed system architecture |
+
+### Round Table Architecture
+
+The optical computer uses a **Round Table** topology:
+
+- **Central Kerr Clock**: 617 MHz optical clock at the center
+- **Equidistant Components**: All processing elements are equidistant from the clock, ensuring synchronous operation
+- **Modular Scaling**: Each Round Table supports 1-8 supercomputers, enabling flexible HPC configurations
+
+---
+
 ## Table of Contents
 
 - [Recent Activity](#recent-activity)

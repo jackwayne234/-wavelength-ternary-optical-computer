@@ -672,6 +672,391 @@ def backplane_central_clock(
 
 
 # =============================================================================
+# ROUND TABLE ARCHITECTURE
+# =============================================================================
+#
+# ████████████████████████████████████████████████████████████████████████████
+# █                                                                          █
+# █   CRITICAL DESIGN PRINCIPLE: MINIMIZE DISTANCE FROM KERR CLOCK           █
+# █                                                                          █
+# █   The Kerr resonator generates the 617 MHz master clock. ALL components  █
+# █   must receive this clock with minimal skew. Clock skew causes:          █
+# █     - Synchronization errors in systolic array                           █
+# █     - Data corruption in streaming pipelines                             █
+# █     - Timing violations at domain boundaries                             █
+# █                                                                          █
+# █   Therefore: Kerr MUST be at exact center, all components equidistant.   █
+# █                                                                          █
+# ████████████████████████████████████████████████████████████████████████████
+#
+# Architecture (Bird's Eye View - Concentric Rings):
+#
+#   Ring 0 (CENTER):  Kerr Clock (617 MHz)
+#   Ring 1:           Supercomputers (1-8, equidistant from Kerr)
+#   Ring 2:           Super IOCs (1-8, one per Supercomputer)
+#   Ring 3 (OUTER):   IOAs (1-8, modular peripheral adapters)
+#
+# Modular Configurations:
+#   MINIMUM: 1 Kerr + 1 SC + 1 SIOC + 1 IOA
+#   MAXIMUM: 1 Kerr + 8 SC + 8 SIOC + 8 IOA
+#
+# =============================================================================
+
+
+def round_table_backplane(
+    n_supercomputers: int = 8,
+    n_siocs: int = 8,
+    n_ioas: int = 8,
+    kerr_radius: float = 100.0,
+    sc_ring_radius: float = 400.0,
+    sioc_ring_radius: float = 650.0,
+    ioa_ring_radius: float = 850.0
+) -> Component:
+    """
+    ROUND TABLE BACKPLANE - The Primary System Architecture
+
+    ████████████████████████████████████████████████████████████████████████
+    █  CRITICAL: All components MUST be equidistant from central Kerr      █
+    █  clock to ensure synchronized 617 MHz timing across the system.      █
+    ████████████████████████████████████████████████████████████████████████
+
+    Architecture (Concentric Rings):
+        CENTER:  Kerr Clock (617 MHz master timing)
+        Ring 1:  Supercomputers (optical compute units)
+        Ring 2:  Super IOCs (streaming data interface)
+        Ring 3:  IOAs (peripheral adapters: Ethernet, Fiber, NVMe, etc.)
+
+    The backplane connects all supercomputers via optical waveguides,
+    allowing them to operate as:
+        - 8 independent LLMs (each with own SIOC/IOA)
+        - 1 unified system (single SIOC for inter-group communication)
+        - Hybrid configurations (some SIOCs for storage, some for networking)
+
+    Args:
+        n_supercomputers: Number of supercomputers (1-8)
+        n_siocs: Number of Super IOCs (1-8, typically matches n_supercomputers)
+        n_ioas: Number of IOAs (1-8, typically matches n_siocs)
+        kerr_radius: Radius of central Kerr clock hub (um)
+        sc_ring_radius: Radius of supercomputer ring from center (um)
+        sioc_ring_radius: Radius of Super IOC ring from center (um)
+        ioa_ring_radius: Radius of IOA ring from center (um)
+
+    Returns:
+        Complete Round Table backplane component
+
+    Example Configurations:
+        Minimum (dev kit):     round_table_backplane(1, 1, 1)
+        Small cluster:         round_table_backplane(4, 2, 2)
+        Full supercomputer:    round_table_backplane(8, 8, 8)
+    """
+    # Validate inputs
+    n_supercomputers = max(1, min(8, n_supercomputers))
+    n_siocs = max(1, min(8, n_siocs))
+    n_ioas = max(1, min(8, n_ioas))
+
+    c = gf.Component(f"round_table_{n_supercomputers}sc_{n_siocs}sioc_{n_ioas}ioa_{_uid()}")
+
+    # Total backplane size (based on outermost ring + margin)
+    backplane_radius = ioa_ring_radius + 200
+    backplane_size = backplane_radius * 2
+    center = backplane_size / 2
+
+    # Background circle (the "table")
+    n_points = 128
+    angles = np.linspace(0, 2*np.pi, n_points)
+    table_points = [(center + backplane_radius * np.cos(a),
+                     center + backplane_radius * np.sin(a)) for a in angles]
+    c.add_polygon(table_points, layer=LAYER_BUS)
+
+    # =========================================================================
+    # RING 0: CENTRAL KERR CLOCK (617 MHz)
+    # =========================================================================
+    # THIS IS THE HEART OF THE SYSTEM - ALL TIMING DERIVES FROM HERE
+
+    kerr_hub = c << kerr_clock_hub(radius=kerr_radius)
+    kerr_hub.dmove((center, center))
+
+    # Emphasis label for Kerr centrality
+    c.add_label("★ KERR 617MHz ★", position=(center, center - kerr_radius - 20), layer=LAYER_TEXT)
+    c.add_label("MASTER CLOCK", position=(center, center - kerr_radius - 40), layer=LAYER_TEXT)
+
+    # =========================================================================
+    # RING 1: SUPERCOMPUTERS (Equidistant from Kerr)
+    # =========================================================================
+
+    sc_positions = []
+    for i in range(n_supercomputers):
+        # Distribute evenly around the ring, starting from top (12 o'clock)
+        angle = (i * 2 * np.pi / n_supercomputers) - np.pi/2
+
+        sc_x = center + sc_ring_radius * np.cos(angle)
+        sc_y = center + sc_ring_radius * np.sin(angle)
+        sc_positions.append((sc_x, sc_y, angle))
+
+        # Supercomputer module (represented as larger slot)
+        sc_slot = c << _supercomputer_module(sc_id=i)
+        sc_slot.dmove((sc_x - 75, sc_y - 50))  # Center the module
+
+        # Clock distribution waveguide from Kerr to SC
+        # CRITICAL: These must all be the same length for clock synchronization
+        kerr_edge_x = center + kerr_radius * np.cos(angle)
+        kerr_edge_y = center + kerr_radius * np.sin(angle)
+        sc_edge_x = center + (sc_ring_radius - 60) * np.cos(angle)
+        sc_edge_y = center + (sc_ring_radius - 60) * np.sin(angle)
+
+        # Clock waveguide (highlighted as critical path)
+        _draw_clock_waveguide(c, kerr_edge_x, kerr_edge_y, sc_edge_x, sc_edge_y, angle)
+
+        # EDFA amplifier on clock line (midpoint)
+        edfa_x = center + (sc_ring_radius * 0.5) * np.cos(angle)
+        edfa_y = center + (sc_ring_radius * 0.5) * np.sin(angle)
+        c.add_polygon([
+            (edfa_x - 12, edfa_y - 6),
+            (edfa_x + 12, edfa_y - 6),
+            (edfa_x + 12, edfa_y + 6),
+            (edfa_x - 12, edfa_y + 6)
+        ], layer=LAYER_GAIN)
+
+    # =========================================================================
+    # RING 2: SUPER IOCs (Streaming Data Interface)
+    # =========================================================================
+
+    sioc_positions = []
+    for i in range(n_siocs):
+        # Align with supercomputer positions if possible
+        if i < n_supercomputers:
+            angle = sc_positions[i][2]
+        else:
+            angle = (i * 2 * np.pi / n_siocs) - np.pi/2
+
+        sioc_x = center + sioc_ring_radius * np.cos(angle)
+        sioc_y = center + sioc_ring_radius * np.sin(angle)
+        sioc_positions.append((sioc_x, sioc_y, angle))
+
+        # Super IOC module
+        sioc_slot = c << _super_ioc_slot(sioc_id=i)
+        sioc_slot.dmove((sioc_x - 50, sioc_y - 35))
+
+        # Data waveguide from SC to SIOC
+        if i < n_supercomputers:
+            sc_x, sc_y, _ = sc_positions[i]
+            sc_outer_x = center + (sc_ring_radius + 60) * np.cos(angle)
+            sc_outer_y = center + (sc_ring_radius + 60) * np.sin(angle)
+            sioc_inner_x = center + (sioc_ring_radius - 55) * np.cos(angle)
+            sioc_inner_y = center + (sioc_ring_radius - 55) * np.sin(angle)
+
+            _draw_data_waveguide(c, sc_outer_x, sc_outer_y, sioc_inner_x, sioc_inner_y, angle)
+
+    # =========================================================================
+    # RING 3: IOAs (Peripheral Adapters)
+    # =========================================================================
+
+    for i in range(n_ioas):
+        # Align with SIOC positions if possible
+        if i < n_siocs:
+            angle = sioc_positions[i][2]
+        else:
+            angle = (i * 2 * np.pi / n_ioas) - np.pi/2
+
+        ioa_x = center + ioa_ring_radius * np.cos(angle)
+        ioa_y = center + ioa_ring_radius * np.sin(angle)
+
+        # IOA module
+        ioa_slot = c << _ioa_slot(ioa_id=i)
+        ioa_slot.dmove((ioa_x - 40, ioa_y - 30))
+
+        # Data waveguide from SIOC to IOA
+        if i < n_siocs:
+            sioc_x, sioc_y, _ = sioc_positions[i]
+            sioc_outer_x = center + (sioc_ring_radius + 45) * np.cos(angle)
+            sioc_outer_y = center + (sioc_ring_radius + 45) * np.sin(angle)
+            ioa_inner_x = center + (ioa_ring_radius - 45) * np.cos(angle)
+            ioa_inner_y = center + (ioa_ring_radius - 45) * np.sin(angle)
+
+            _draw_data_waveguide(c, sioc_outer_x, sioc_outer_y, ioa_inner_x, ioa_inner_y, angle)
+
+    # =========================================================================
+    # INTER-SUPERCOMPUTER DATA BUS (Ring connecting all SCs)
+    # =========================================================================
+
+    if n_supercomputers > 1:
+        # Data bus ring (allows SCs to communicate via backplane)
+        data_bus_radius = sc_ring_radius - 80
+        _draw_ring_bus(c, center, data_bus_radius, "DATA BUS")
+
+    # =========================================================================
+    # LABELS AND DOCUMENTATION
+    # =========================================================================
+
+    # Title
+    c.add_label("═══════════════════════════════════════════════════",
+                position=(center, backplane_size - 30), layer=LAYER_TEXT)
+    c.add_label("ROUND TABLE BACKPLANE - OPTICAL SUPERCOMPUTER",
+                position=(center, backplane_size - 50), layer=LAYER_TEXT)
+    c.add_label(f"{n_supercomputers} SC | {n_siocs} SIOC | {n_ioas} IOA",
+                position=(center, backplane_size - 70), layer=LAYER_TEXT)
+    c.add_label("═══════════════════════════════════════════════════",
+                position=(center, backplane_size - 90), layer=LAYER_TEXT)
+
+    # Ring labels
+    c.add_label("Ring 1: SUPERCOMPUTERS",
+                position=(center + sc_ring_radius + 100, center), layer=LAYER_TEXT)
+    c.add_label("Ring 2: SUPER IOCs",
+                position=(center + sioc_ring_radius + 80, center - 30), layer=LAYER_TEXT)
+    c.add_label("Ring 3: IOAs",
+                position=(center + ioa_ring_radius + 60, center - 60), layer=LAYER_TEXT)
+
+    # Critical design note
+    c.add_label("▼ ALL CLOCK PATHS EQUAL LENGTH ▼",
+                position=(center, 60), layer=LAYER_TEXT)
+
+    # External connection ports
+    c.add_port("external_0", center=(center, backplane_size), width=10,
+               orientation=90, layer=LAYER_WAVEGUIDE)
+    c.add_port("power_in", center=(0, center), width=20,
+               orientation=180, layer=LAYER_METAL_PAD)
+
+    return c
+
+
+def _supercomputer_module(sc_id: int = 0) -> Component:
+    """
+    Supercomputer module representation for Round Table.
+
+    Contains: 243×243 Systolic Array (or 81×81), Super IOC interface
+    """
+    c = gf.Component(f"sc_module_{sc_id}_{_uid()}")
+
+    width, height = 150, 100
+
+    # Module outline
+    c.add_polygon([(0, 0), (width, 0), (width, height), (0, height)], layer=LAYER_SWITCH)
+
+    # Internal representation (systolic array grid)
+    grid_margin = 10
+    grid_size = 8
+    cell_w = (width - 2*grid_margin) / grid_size
+    cell_h = (height - 2*grid_margin) / grid_size
+    for i in range(grid_size):
+        for j in range(grid_size):
+            cx = grid_margin + i * cell_w + cell_w/2
+            cy = grid_margin + j * cell_h + cell_h/2
+            c.add_polygon([
+                (cx - 2, cy - 2), (cx + 2, cy - 2),
+                (cx + 2, cy + 2), (cx - 2, cy + 2)
+            ], layer=LAYER_WAVEGUIDE)
+
+    # Label
+    c.add_label(f"SC-{sc_id}", position=(width/2, height/2), layer=LAYER_TEXT)
+    c.add_label("243×243", position=(width/2, height/2 - 15), layer=LAYER_TEXT)
+
+    # Ports
+    c.add_port("clk_in", center=(width/2, 0), width=2, orientation=270, layer=LAYER_WAVEGUIDE)
+    c.add_port("data_out", center=(width/2, height), width=4, orientation=90, layer=LAYER_WAVEGUIDE)
+
+    return c
+
+
+def _super_ioc_slot(sioc_id: int = 0) -> Component:
+    """
+    Super IOC slot for Round Table.
+
+    Handles: Weight loading, Activation streaming, Result collection
+    """
+    c = gf.Component(f"sioc_slot_{sioc_id}_{_uid()}")
+
+    width, height = 100, 70
+
+    # Module outline
+    c.add_polygon([(0, 0), (width, 0), (width, height), (0, height)], layer=LAYER_AWG)
+
+    # Internal blocks
+    block_w = width / 3 - 5
+    for i, label in enumerate(['WL', 'AS', 'RC']):  # Weight Loader, Act Streamer, Result Collector
+        bx = 5 + i * (block_w + 2.5)
+        c.add_polygon([
+            (bx, 10), (bx + block_w, 10),
+            (bx + block_w, height - 10), (bx, height - 10)
+        ], layer=LAYER_HEATER)
+        c.add_label(label, position=(bx + block_w/2, height/2), layer=LAYER_TEXT)
+
+    # Label
+    c.add_label(f"SIOC-{sioc_id}", position=(width/2, height - 5), layer=LAYER_TEXT)
+
+    # Ports
+    c.add_port("sc_in", center=(width/2, 0), width=4, orientation=270, layer=LAYER_WAVEGUIDE)
+    c.add_port("ioa_out", center=(width/2, height), width=4, orientation=90, layer=LAYER_WAVEGUIDE)
+
+    return c
+
+
+def _ioa_slot(ioa_id: int = 0) -> Component:
+    """
+    IOA slot for Round Table.
+
+    Modular adapter: Ethernet, Fiber, Coax, NVMe, etc.
+    """
+    c = gf.Component(f"ioa_slot_{ioa_id}_{_uid()}")
+
+    width, height = 80, 60
+
+    # Module outline
+    c.add_polygon([(0, 0), (width, 0), (width, height), (0, height)], layer=LAYER_METAL_PAD)
+
+    # Connector representation
+    c.add_polygon([
+        (width/2 - 15, height - 20), (width/2 + 15, height - 20),
+        (width/2 + 15, height - 5), (width/2 - 15, height - 5)
+    ], layer=LAYER_HEATER)
+
+    # Label
+    c.add_label(f"IOA-{ioa_id}", position=(width/2, height/2 - 10), layer=LAYER_TEXT)
+    c.add_label("MODULAR", position=(width/2, 10), layer=LAYER_TEXT)
+
+    # Port
+    c.add_port("sioc_in", center=(width/2, 0), width=4, orientation=270, layer=LAYER_WAVEGUIDE)
+
+    return c
+
+
+def _draw_clock_waveguide(c: Component, x1: float, y1: float, x2: float, y2: float, angle: float):
+    """Draw a clock distribution waveguide (critical path - highlighted)."""
+    dx = 3 * np.cos(angle + np.pi/2)
+    dy = 3 * np.sin(angle + np.pi/2)
+    c.add_polygon([
+        (x1 - dx, y1 - dy), (x2 - dx, y2 - dy),
+        (x2 + dx, y2 + dy), (x1 + dx, y1 + dy)
+    ], layer=LAYER_HEATER)  # Heater layer to highlight clock paths
+
+
+def _draw_data_waveguide(c: Component, x1: float, y1: float, x2: float, y2: float, angle: float):
+    """Draw a data waveguide between components."""
+    dx = 2 * np.cos(angle + np.pi/2)
+    dy = 2 * np.sin(angle + np.pi/2)
+    c.add_polygon([
+        (x1 - dx, y1 - dy), (x2 - dx, y2 - dy),
+        (x2 + dx, y2 + dy), (x1 + dx, y1 + dy)
+    ], layer=LAYER_WAVEGUIDE)
+
+
+def _draw_ring_bus(c: Component, center: float, radius: float, label: str):
+    """Draw a ring bus connecting components at given radius."""
+    n_points = 64
+    angles = np.linspace(0, 2*np.pi, n_points)
+
+    for i in range(n_points - 1):
+        a1, a2 = angles[i], angles[i+1]
+        c.add_polygon([
+            (center + (radius - 3) * np.cos(a1), center + (radius - 3) * np.sin(a1)),
+            (center + (radius + 3) * np.cos(a1), center + (radius + 3) * np.sin(a1)),
+            (center + (radius + 3) * np.cos(a2), center + (radius + 3) * np.sin(a2)),
+            (center + (radius - 3) * np.cos(a2), center + (radius - 3) * np.sin(a2)),
+        ], layer=LAYER_WAVEGUIDE)
+
+    c.add_label(label, position=(center + radius + 30, center), layer=LAYER_TEXT)
+
+
+# =============================================================================
 # Export functions
 # =============================================================================
 
@@ -683,30 +1068,61 @@ __all__ = [
     'optical_backplane',
     'mini_backplane',
     'kerr_clock_hub',
-    'backplane_central_clock'
+    'backplane_central_clock',
+    'round_table_backplane',  # PRIMARY ARCHITECTURE
 ]
 
 
 if __name__ == "__main__":
     import os
 
-    print("Generating Optical Backplane components...")
+    print("=" * 70)
+    print("OPTICAL BACKPLANE GENERATOR")
+    print("=" * 70)
 
-    # Generate full backplane
-    bp = optical_backplane(n_opu_slots=4, n_ioc_slots=2, n_ioa_slots=4)
-    bbox = bp.dbbox()
-    print(f"Full Backplane: {bbox.width():.0f} x {bbox.height():.0f} um")
-
-    # Generate mini backplane
-    mini = mini_backplane(n_slots=4)
-    bbox2 = mini.dbbox()
-    print(f"Mini Backplane: {bbox2.width():.0f} x {bbox2.height():.0f} um")
-
-    # Save
     output_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'gds')
     os.makedirs(output_dir, exist_ok=True)
 
+    # =========================================================================
+    # ROUND TABLE BACKPLANES (PRIMARY ARCHITECTURE)
+    # =========================================================================
+    print("\n>>> ROUND TABLE ARCHITECTURE (Primary) <<<")
+    print("    Critical: Kerr clock at center, all components equidistant\n")
+
+    # Minimum configuration (dev kit)
+    rt_min = round_table_backplane(n_supercomputers=1, n_siocs=1, n_ioas=1)
+    bbox = rt_min.dbbox()
+    print(f"  Round Table MINIMUM (1 SC):  {bbox.width():.0f} x {bbox.height():.0f} um")
+    rt_min.write_gds(os.path.join(output_dir, 'round_table_minimum.gds'))
+
+    # Small cluster
+    rt_small = round_table_backplane(n_supercomputers=4, n_siocs=2, n_ioas=2)
+    bbox = rt_small.dbbox()
+    print(f"  Round Table SMALL (4 SC):    {bbox.width():.0f} x {bbox.height():.0f} um")
+    rt_small.write_gds(os.path.join(output_dir, 'round_table_small.gds'))
+
+    # Maximum configuration (full supercomputer)
+    rt_max = round_table_backplane(n_supercomputers=8, n_siocs=8, n_ioas=8)
+    bbox = rt_max.dbbox()
+    print(f"  Round Table MAXIMUM (8 SC):  {bbox.width():.0f} x {bbox.height():.0f} um")
+    rt_max.write_gds(os.path.join(output_dir, 'round_table_maximum.gds'))
+
+    # =========================================================================
+    # LEGACY BACKPLANES (for reference)
+    # =========================================================================
+    print("\n>>> Legacy Backplanes (reference only) <<<\n")
+
+    # Full backplane (linear layout)
+    bp = optical_backplane(n_opu_slots=4, n_ioc_slots=2, n_ioa_slots=4)
+    bbox = bp.dbbox()
+    print(f"  Linear Backplane:            {bbox.width():.0f} x {bbox.height():.0f} um")
     bp.write_gds(os.path.join(output_dir, 'optical_backplane.gds'))
+
+    # Mini backplane
+    mini = mini_backplane(n_slots=4)
+    bbox = mini.dbbox()
+    print(f"  Mini Backplane:              {bbox.width():.0f} x {bbox.height():.0f} um")
     mini.write_gds(os.path.join(output_dir, 'mini_backplane.gds'))
 
-    print(f"Saved to {output_dir}")
+    print(f"\n>>> All files saved to {output_dir}")
+    print("=" * 70)
