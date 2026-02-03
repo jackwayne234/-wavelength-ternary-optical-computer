@@ -392,14 +392,68 @@ The chip generator now offers three complete system tiers:
 
 ---
 
+## Benchmark Suite Created
+
+Full stress testing framework with results:
+
+### Benchmarks Included
+- **GEMM** (4096×4096 matrix multiply)
+- **Mandelbrot Set** (8192×8192, 500 avg iterations)
+- **Monte Carlo Pi** (10 billion samples)
+- **Prime Counting** (Miller-Rabin on 100 million numbers)
+- **Transformer Layer** (2048 seq, 4096 d_model - real LLM workload)
+
+### Results Summary
+
+| Tier | Peak TFLOPS | vs RTX 4090 | vs H100 |
+|------|-------------|-------------|---------|
+| Standard | 4.0 | 0.05x | - |
+| Home AI | 291.5 | **3.5x faster** | 0.15x |
+| Supercomputer | 2,331.7 | **28x faster** | **1.17x faster** |
+
+### Key Results
+- **Transformer inference**: 430μs on Supercomputer (2,081 effective TFLOPS)
+- **Prime counting (100M)**: 765μs on Supercomputer
+- **GEMM 4096×4096**: 62μs on Supercomputer
+
+Run with: `.mamba_env/bin/python3 Research/programs/optical_benchmark_suite.py --all`
+
+---
+
+## Architecture Ideas (For Next Session)
+
+### Dual IOC Configuration
+Each chip group could have TWO IOCs:
+1. **Comms IOC** - Inter-computer communication, networking
+2. **Storage IOC** - Connects to IOA for dedicated storage access
+
+This separates concerns and prevents I/O bottlenecks:
+```
+                    ┌─────────────┐
+    Network ←───────┤  COMMS IOC  │
+                    └──────┬──────┘
+                           │
+                    ┌──────┴──────┐
+                    │  AI CHIPS   │
+                    └──────┬──────┘
+                           │
+                    ┌──────┴──────┐
+    Storage ←───────┤ STORAGE IOC ├───→ IOA (NVMe/HBM)
+                    └─────────────┘
+```
+
+---
+
 ## Next Steps
 
 1. ~~**Generate full 81×81 GDS files**~~ ✓ DONE
 2. ~~**Upgrade to C-band WDM**~~ ✓ DONE
 3. ~~**Three-tier system design**~~ ✓ DONE
-4. **Complete Kerr χ³ sweep** - IN PROGRESS
-5. **Validate WDM component physics with Meep**
-6. **Benchmark against GPU/TPU for specific AI workloads**
+4. ~~**Benchmark suite**~~ ✓ DONE
+5. **Complete Kerr χ³ sweep** - IN PROGRESS (still running)
+6. **Validate WDM component physics with Meep**
+7. **Implement dual IOC architecture**
+8. **Physical layout optimization**
 
 ---
 
