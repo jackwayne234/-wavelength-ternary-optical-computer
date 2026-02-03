@@ -3517,21 +3517,198 @@ def interactive_generator():
         print("\n" + "█"*70)
         print("█  CRITICAL: ALL COMPONENTS EQUIDISTANT FROM CENTRAL KERR CLOCK  █")
         print("█"*70)
-        print("\nRound Table Layout (Bird's Eye View):")
-        print("  Ring 0 (CENTER): Kerr Clock (617 MHz)")
-        print("  Ring 1: 8 Supercomputers (243x243 systolic arrays)")
-        print("  Ring 2: 8 Super IOCs (streaming interface)")
-        print("  Ring 3: 8 IOAs (modular: Ethernet/Fiber/NVMe)")
+
+        print("\n" + "-"*70)
+        print("  SELECT CONFIGURATION:")
+        print("-"*70)
+        print("\n  [A] INDEPENDENT MODE (8 separate LLMs)")
+        print("      - 8 Supercomputers, each with own Super IOC and IOA")
+        print("      - Each SC operates independently")
+        print("      - Use case: 8 parallel inference engines")
+
+        print("\n  [B] UNIFIED MODE (Single massive system)")
+        print("      - 8 Supercomputers working together via data bus")
+        print("      - 2 Super IOCs only:")
+        print("        • SIOC-COMM: Inter-group communication (Fiber IOA)")
+        print("        • SIOC-STOR: Storage connection (NVMe/HBM IOA)")
+        print("      - Use case: Large model training, distributed inference")
+
+        config_choice = input("\nSelect configuration (A/B) [A]: ").strip().upper() or "A"
+
+        # Common parameters
         print("\nTotal Compute:")
         print("  - 8 Supercomputers x 59,049 PEs x 8 WDM = 3,779,136 compute units")
         print("  - ~2.33 PFLOPS (1.2x NVIDIA H100!)")
-        print("\nGenerating Supercomputer with actual components...")
 
         try:
             from c_band_wdm_systolic import wdm_systolic_array, wdm_super_ioc
 
-            # Create the main component
-            c = gf.Component("tier3_supercomputer_round_table")
+            # Layout parameters - ensure proper spacing
+            kerr_radius = 300.0
+            sc_ring_radius = 2000.0      # Supercomputers ring
+            sioc_ring_radius = 3500.0    # Super IOCs ring
+            ioa_ring_radius = 4500.0     # IOAs ring
+            total_radius = ioa_ring_radius + 800
+            n_supercomputers = 8
+
+            # Calculate center
+            center_x = total_radius + 500
+            center_y = total_radius + 500
+
+            # ═══════════════════════════════════════════════════════════════
+            # CONFIGURATION B: UNIFIED MODE (8 SC, 2 SIOC, 2 IOA)
+            # ═══════════════════════════════════════════════════════════════
+            if config_choice == "B":
+                print("\n" + "="*70)
+                print("  GENERATING: UNIFIED MODE")
+                print("  8 Supercomputers + 2 Super IOCs + 2 IOAs")
+                print("="*70)
+
+                c = gf.Component("tier3_supercomputer_unified")
+
+                # Background circle (the "Round Table")
+                table = c << gf.components.circle(radius=total_radius, layer=(20, 0))
+                table.dmove((center_x, center_y))
+
+                # ─────────────────────────────────────────────────────────
+                # RING 0: CENTRAL KERR CLOCK
+                # ─────────────────────────────────────────────────────────
+                print("  → Generating Central Kerr Clock...")
+                kerr = c << kerr_clock_hub(radius=kerr_radius)
+                kerr.dmove((center_x, center_y))
+
+                clock_ring = c << gf.components.ring(radius=kerr_radius + 100, width=10, layer=(10, 0))
+                clock_ring.dmove((center_x, center_y))
+
+                # ─────────────────────────────────────────────────────────
+                # RING 1: 8 SUPERCOMPUTERS (all working together)
+                # ─────────────────────────────────────────────────────────
+                print("  → Generating 8 Supercomputers (unified via data bus)...")
+                sc_size = 800
+                for i in range(n_supercomputers):
+                    angle = (i * 2 * np.pi / n_supercomputers) - np.pi/2
+
+                    sc_x = center_x + sc_ring_radius * np.cos(angle)
+                    sc_y = center_y + sc_ring_radius * np.sin(angle)
+
+                    sc_array = c << wdm_systolic_array(n_rows=9, n_cols=9, n_channels=8, array_id=f"SC{i}")
+                    sc_array.dmove((sc_x - sc_size/2, sc_y - sc_size/2))
+
+                    c.add_label(f"SUPERCOMPUTER-{i}", position=(sc_x, sc_y + sc_size/2 + 50), layer=LABEL_LAYER)
+                    c.add_label("243x243 x 8WDM", position=(sc_x, sc_y + sc_size/2 + 20), layer=LABEL_LAYER)
+
+                    # Clock waveguide
+                    clock_start_x = center_x + (kerr_radius + 120) * np.cos(angle)
+                    clock_start_y = center_y + (kerr_radius + 120) * np.sin(angle)
+                    clock_end_x = center_x + (sc_ring_radius - sc_size/2 - 50) * np.cos(angle)
+                    clock_end_y = center_y + (sc_ring_radius - sc_size/2 - 50) * np.sin(angle)
+
+                    clock_wg_len = np.sqrt((clock_end_x - clock_start_x)**2 + (clock_end_y - clock_start_y)**2)
+                    clock_wg = c << gf.components.straight(length=clock_wg_len, width=8)
+                    clock_wg.drotate(np.degrees(angle))
+                    clock_wg.dmove((clock_start_x, clock_start_y))
+
+                # ─────────────────────────────────────────────────────────
+                # DATA BUS RING (critical for unified operation)
+                # ─────────────────────────────────────────────────────────
+                print("  → Generating Data Bus Ring (connects all 8 SCs)...")
+                data_bus = c << gf.components.ring(radius=sc_ring_radius - sc_size/2 - 100, width=20, layer=(1, 0))
+                data_bus.dmove((center_x, center_y))
+                c.add_label("DATA BUS", position=(center_x, center_y - sc_ring_radius + sc_size/2 + 150), layer=LABEL_LAYER)
+
+                # ─────────────────────────────────────────────────────────
+                # RING 2: 2 SUPER IOCs (opposite positions)
+                # ─────────────────────────────────────────────────────────
+                print("  → Generating 2 Super IOCs (COMM + STORAGE)...")
+                sioc_width = 800
+                sioc_height = 500
+                sioc_positions = [0, 4]  # Top and bottom positions
+                sioc_labels = ["SIOC-COMM", "SIOC-STOR"]
+                sioc_purposes = ["Inter-Group", "Storage"]
+
+                for idx, pos in enumerate(sioc_positions):
+                    angle = (pos * 2 * np.pi / n_supercomputers) - np.pi/2
+
+                    sioc_x = center_x + sioc_ring_radius * np.cos(angle)
+                    sioc_y = center_y + sioc_ring_radius * np.sin(angle)
+
+                    sioc = c << wdm_super_ioc(n_channels=8, n_data_lanes=243)
+                    sioc.dmove((sioc_x - sioc_width/2, sioc_y - sioc_height/2))
+
+                    c.add_label(sioc_labels[idx], position=(sioc_x, sioc_y + sioc_height/2 + 50), layer=LABEL_LAYER)
+                    c.add_label(sioc_purposes[idx], position=(sioc_x, sioc_y + sioc_height/2 + 20), layer=LABEL_LAYER)
+
+                    # Waveguide from data bus to SIOC
+                    bus_x = center_x + (sc_ring_radius - sc_size/2 - 100) * np.cos(angle)
+                    bus_y = center_y + (sc_ring_radius - sc_size/2 - 100) * np.sin(angle)
+                    sioc_in_x = center_x + (sioc_ring_radius - sioc_width/2 - 50) * np.cos(angle)
+                    sioc_in_y = center_y + (sioc_ring_radius - sioc_height/2 - 50) * np.sin(angle)
+
+                    wg_len = np.sqrt((sioc_in_x - bus_x)**2 + (sioc_in_y - bus_y)**2)
+                    if wg_len > 10:
+                        wg = c << gf.components.straight(length=wg_len, width=15)
+                        wg.drotate(np.degrees(angle))
+                        wg.dmove((bus_x, bus_y))
+
+                # ─────────────────────────────────────────────────────────
+                # RING 3: 2 IOAs (matching SIOCs)
+                # ─────────────────────────────────────────────────────────
+                print("  → Generating 2 IOAs (Fiber + NVMe/HBM)...")
+                ioa_size = 400
+
+                for idx, pos in enumerate(sioc_positions):
+                    angle = (pos * 2 * np.pi / n_supercomputers) - np.pi/2
+
+                    ioa_x = center_x + ioa_ring_radius * np.cos(angle)
+                    ioa_y = center_y + ioa_ring_radius * np.sin(angle)
+
+                    if idx == 0:
+                        ioa = c << network_ioa()
+                        ioa_type = "FIBER"
+                        ioa_label = "IOA-COMM"
+                    else:
+                        ioa = c << storage_ioa()
+                        ioa_type = "NVMe/HBM"
+                        ioa_label = "IOA-STOR"
+
+                    ioa.dmove((ioa_x - ioa_size/2, ioa_y - ioa_size/2))
+
+                    c.add_label(ioa_label, position=(ioa_x, ioa_y + ioa_size/2 + 40), layer=LABEL_LAYER)
+                    c.add_label(ioa_type, position=(ioa_x, ioa_y + ioa_size/2 + 15), layer=LABEL_LAYER)
+
+                    # Waveguide from SIOC to IOA
+                    sioc_out_x = center_x + (sioc_ring_radius + sioc_width/2 + 50) * np.cos(angle)
+                    sioc_out_y = center_y + (sioc_ring_radius + sioc_height/2 + 50) * np.sin(angle)
+                    ioa_in_x = center_x + (ioa_ring_radius - ioa_size/2 - 50) * np.cos(angle)
+                    ioa_in_y = center_y + (ioa_ring_radius - ioa_size/2 - 50) * np.sin(angle)
+
+                    wg_len = np.sqrt((ioa_in_x - sioc_out_x)**2 + (ioa_in_y - sioc_out_y)**2)
+                    if wg_len > 10:
+                        wg = c << gf.components.straight(length=wg_len, width=10)
+                        wg.drotate(np.degrees(angle))
+                        wg.dmove((sioc_out_x, sioc_out_y))
+
+                # Labels
+                c.add_label("TIER 3: SUPERCOMPUTER - UNIFIED MODE", position=(center_x, total_radius * 2 + 400), layer=LABEL_LAYER)
+                c.add_label("8 Supercomputers + 2 Super IOCs + 2 IOAs", position=(center_x, total_radius * 2 + 350), layer=LABEL_LAYER)
+                c.add_label("All SCs connected via Data Bus Ring", position=(center_x, total_radius * 2 + 300), layer=LABEL_LAYER)
+                c.add_label("~2.33 PFLOPS @ 617 MHz", position=(center_x, total_radius * 2 + 250), layer=LABEL_LAYER)
+                c.add_label("★ UNIFIED SYSTEM - ALL 8 SCs WORKING TOGETHER ★", position=(center_x, 100), layer=LABEL_LAYER)
+
+                chip = c
+                chip_name = "tier3_supercomputer_unified"
+                print("\n  ✓ Unified Supercomputer generation complete!")
+
+            # ═══════════════════════════════════════════════════════════════
+            # CONFIGURATION A: INDEPENDENT MODE (8 SC, 8 SIOC, 8 IOA)
+            # ═══════════════════════════════════════════════════════════════
+            else:
+                print("\n" + "="*70)
+                print("  GENERATING: INDEPENDENT MODE")
+                print("  8 Supercomputers + 8 Super IOCs + 8 IOAs")
+                print("="*70)
+
+                c = gf.Component("tier3_supercomputer_independent")
 
             # Layout parameters - ensure proper spacing
             kerr_radius = 300.0
@@ -3671,14 +3848,15 @@ def interactive_generator():
             # ═══════════════════════════════════════════════════════════
             # LABELS
             # ═══════════════════════════════════════════════════════════
-            c.add_label("TIER 3: SUPERCOMPUTER - ROUND TABLE", position=(center_x, total_radius * 2 + 400), layer=LABEL_LAYER)
+            c.add_label("TIER 3: SUPERCOMPUTER - INDEPENDENT MODE", position=(center_x, total_radius * 2 + 400), layer=LABEL_LAYER)
             c.add_label("8 Supercomputers + 8 Super IOCs + 8 IOAs", position=(center_x, total_radius * 2 + 350), layer=LABEL_LAYER)
-            c.add_label("~2.33 PFLOPS @ 617 MHz", position=(center_x, total_radius * 2 + 300), layer=LABEL_LAYER)
+            c.add_label("Each SC operates independently (8 separate LLMs)", position=(center_x, total_radius * 2 + 300), layer=LABEL_LAYER)
+            c.add_label("~2.33 PFLOPS @ 617 MHz", position=(center_x, total_radius * 2 + 250), layer=LABEL_LAYER)
             c.add_label("★ ALL COMPONENTS EQUIDISTANT FROM KERR CLOCK ★", position=(center_x, 100), layer=LABEL_LAYER)
 
             chip = c
-            chip_name = "tier3_supercomputer_round_table"
-            print("\n  ✓ Supercomputer generation complete!")
+            chip_name = "tier3_supercomputer_independent"
+            print("\n  ✓ Independent Supercomputer generation complete!")
 
         except ImportError as e:
             print(f"Error: {e}")

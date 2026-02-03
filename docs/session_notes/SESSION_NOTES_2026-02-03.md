@@ -819,6 +819,24 @@ ioa_ring_radius = 4500 μm (IOAs)
 ## INSTRUCTIONS FOR FUTURE SESSIONS
 ## ═══════════════════════════════════════════════════════════════════
 
+### Supercomputer Configurations Added
+
+Updated Option 3 (Supercomputer) to offer two configurations:
+
+**[A] INDEPENDENT MODE:**
+- 8 Supercomputers, each with own Super IOC and IOA
+- Each SC operates as independent LLM
+- 8 parallel inference engines
+
+**[B] UNIFIED MODE:**
+- 8 Supercomputers working together via data bus ring
+- Only 2 Super IOCs:
+  - SIOC-COMM: Inter-group communication (Fiber IOA)
+  - SIOC-STOR: Storage connection (NVMe/HBM IOA)
+- Single massive unified system for large model training
+
+---
+
 ### Auto-Commit Policy
 
 **IMPORTANT**: Commit and push changes to GitHub at regular intervals:
