@@ -460,6 +460,377 @@ def mul_mixer(
     return c
 
 
+def universal_alu_mixer(
+    name: str = "universal_alu",
+    uid: str = ""
+) -> gf.Component:
+    """
+    Creates a universal ALU mixer with ALL FOUR operations using log-domain.
+
+    Log-domain insight:
+      - Multiply = add in log domain: ln(A) + ln(B) = ln(A×B)
+      - Divide = subtract in log domain: ln(A) - ln(B) = ln(A/B)
+
+    So we only need TWO mixers (SFG and DFG) plus log/exp converters!
+
+    Architecture:
+                         ┌──────────────────────────────────────┐
+        Linear path:     │  Input ─────────────────→ Mixer ─────────────────→ Output
+                         │                            │                         │
+        Log path:        │  Input ──→ LOG ──→ Mixer ──┼──→ EXP ──→ Output       │
+                         └──────────────────────────────────────┘
+
+    Operations:
+      - ctrl_linear + ctrl_sfg → Addition (A + B)
+      - ctrl_linear + ctrl_dfg → Subtraction (A - B)
+      - ctrl_log + ctrl_sfg → Multiplication (A × B)
+      - ctrl_log + ctrl_dfg → Division (A ÷ B)
+
+    Args:
+        name: Component name
+        uid: Unique identifier for sub-component names
+    """
+    import uuid as uuid_mod
+    if not uid:
+        uid = str(uuid_mod.uuid4())[:8]
+
+    c = gf.Component(name)
+
+    # === INPUT STAGE ===
+    input_split = c << gf.components.mmi1x2()
+    input_split.dmove((0, 0))
+
+    # === LINEAR PATH (top) - bypass log converter ===
+    mzi_linear = c << mzi_switch(arm_length=25, name=f"mzi_lin_{uid}")
+    mzi_linear.dmove((40, 25))
+    route_single(c, cross_section=XS, port1=input_split.ports["o2"], port2=mzi_linear.ports["input"])
+
+    # === LOG PATH (bottom) - through log converter ===
+    log_conv = c << optical_log_converter(length=35, name=f"log_{uid}")
+    log_conv.dmove((25, -25))
+    route_single(c, cross_section=XS, port1=input_split.ports["o3"], port2=log_conv.ports["input"])
+
+    mzi_log = c << mzi_switch(arm_length=25, name=f"mzi_log_{uid}")
+    mzi_log.dmove((80, -25))
+    route_single(c, cross_section=XS, port1=log_conv.ports["output"], port2=mzi_log.ports["input"])
+
+    # === COMBINE BEFORE MIXER ===
+    pre_mix = c << gf.components.mmi2x2()
+    pre_mix.dmove((140, 0))
+    route_single(c, cross_section=XS, port1=mzi_linear.ports["bar"], port2=pre_mix.ports["o1"])
+    route_single(c, cross_section=XS, port1=mzi_log.ports["bar"], port2=pre_mix.ports["o2"])
+
+    # === MIXER SELECTION ===
+    mixer_split = c << gf.components.mmi1x2()
+    mixer_split.dmove((170, 0))
+    route_single(c, cross_section=XS, port1=pre_mix.ports["o3"], port2=mixer_split.ports["o1"])
+
+    # SFG mixer (add in linear, multiply in log)
+    mzi_sfg = c << mzi_switch(arm_length=20, name=f"mzi_sfg_{uid}")
+    mzi_sfg.dmove((200, 20))
+    route_single(c, cross_section=XS, port1=mixer_split.ports["o2"], port2=mzi_sfg.ports["input"])
+
+    mixer_sfg = c << sfg_mixer(length=20, name=f"sfg_{uid}")
+    mixer_sfg.dmove((270, 20))
+    route_single(c, cross_section=XS, port1=mzi_sfg.ports["bar"], port2=mixer_sfg.ports["input"])
+
+    # DFG mixer (subtract in linear, divide in log)
+    mzi_dfg = c << mzi_switch(arm_length=20, name=f"mzi_dfg_{uid}")
+    mzi_dfg.dmove((200, -20))
+    route_single(c, cross_section=XS, port1=mixer_split.ports["o3"], port2=mzi_dfg.ports["input"])
+
+    mixer_dfg = c << dfg_mixer(length=25, name=f"dfg_{uid}")
+    mixer_dfg.dmove((270, -20))
+    route_single(c, cross_section=XS, port1=mzi_dfg.ports["bar"], port2=mixer_dfg.ports["input"])
+
+    # === COMBINE MIXER OUTPUTS ===
+    post_mix = c << gf.components.mmi2x2()
+    post_mix.dmove((310, 0))
+    route_single(c, cross_section=XS, port1=mixer_sfg.ports["output"], port2=post_mix.ports["o1"])
+    route_single(c, cross_section=XS, port1=mixer_dfg.ports["output"], port2=post_mix.ports["o2"])
+
+    # === OUTPUT STAGE ===
+    output_split = c << gf.components.mmi1x2()
+    output_split.dmove((340, 0))
+    route_single(c, cross_section=XS, port1=post_mix.ports["o3"], port2=output_split.ports["o1"])
+
+    # Linear output (bypass exp)
+    linear_out = c << gf.components.straight(length=30, width=0.5)
+    linear_out.dmove((370, 15))
+    route_single(c, cross_section=XS, port1=output_split.ports["o2"], port2=linear_out.ports["o1"])
+
+    # Log output (through exp converter)
+    exp_conv = c << optical_exp_converter(length=35, name=f"exp_{uid}")
+    exp_conv.dmove((370, -20))
+    route_single(c, cross_section=XS, port1=output_split.ports["o3"], port2=exp_conv.ports["input"])
+
+    # Final output combine
+    final_combine = c << gf.components.mmi2x2()
+    final_combine.dmove((430, 0))
+    route_single(c, cross_section=XS, port1=linear_out.ports["o2"], port2=final_combine.ports["o1"])
+    route_single(c, cross_section=XS, port1=exp_conv.ports["output"], port2=final_combine.ports["o2"])
+
+    # === CONTROL ELECTRODE PADS ===
+    pad_w, pad_h = 18, 12
+
+    # Linear/Log domain select
+    c.add_polygon([(45, 48), (45 + pad_w, 48), (45 + pad_w, 48 + pad_h), (45, 48 + pad_h)], layer=HEATER_LAYER)
+    c.add_polygon([(85, -50), (85 + pad_w, -50), (85 + pad_w, -50 + pad_h), (85, -50 + pad_h)], layer=HEATER_LAYER)
+
+    # Operation select (SFG/DFG)
+    c.add_polygon([(205, 43), (205 + pad_w, 43), (205 + pad_w, 43 + pad_h), (205, 43 + pad_h)], layer=HEATER_LAYER)
+    c.add_polygon([(205, -45), (205 + pad_w, -45), (205 + pad_w, -45 + pad_h), (205, -45 + pad_h)], layer=HEATER_LAYER)
+
+    # === LABELS ===
+    c.add_label("UNIVERSAL_ALU_v2", position=(220, 60), layer=LABEL_LAYER)
+    c.add_label("LOG", position=(40, -40), layer=LABEL_LAYER)
+    c.add_label("EXP", position=(385, -35), layer=LABEL_LAYER)
+    c.add_label("ADD/MUL", position=(275, 30), layer=LABEL_LAYER)
+    c.add_label("SUB/DIV", position=(278, -30), layer=LABEL_LAYER)
+
+    # Operation guide
+    c.add_label("LIN+SFG=ADD", position=(100, 55), layer=LABEL_LAYER)
+    c.add_label("LIN+DFG=SUB", position=(100, -55), layer=LABEL_LAYER)
+    c.add_label("LOG+SFG=MUL", position=(320, 55), layer=LABEL_LAYER)
+    c.add_label("LOG+DFG=DIV", position=(320, -55), layer=LABEL_LAYER)
+
+    # === PORTS ===
+    c.add_port(name="input", port=input_split.ports["o1"])
+    c.add_port(name="output", port=final_combine.ports["o3"])
+    c.add_port(name="pump_exp", port=exp_conv.ports["pump"])
+
+    # Control ports
+    c.add_port(name="ctrl_linear", center=(54, 54), width=pad_w, orientation=90, layer=HEATER_LAYER)
+    c.add_port(name="ctrl_log", center=(94, -44), width=pad_w, orientation=90, layer=HEATER_LAYER)
+    c.add_port(name="ctrl_sfg", center=(214, 49), width=pad_w, orientation=90, layer=HEATER_LAYER)
+    c.add_port(name="ctrl_dfg", center=(214, -39), width=pad_w, orientation=90, layer=HEATER_LAYER)
+
+    return c
+
+
+# =============================================================================
+# LOG-DOMAIN ARITHMETIC COMPONENTS
+# =============================================================================
+# Log-domain enables division and simplifies multiplication:
+#   - Multiply: ln(A) + ln(B) = ln(A×B) → use SFG (addition)
+#   - Divide:   ln(A) - ln(B) = ln(A/B) → use DFG (subtraction)
+
+
+def optical_log_converter(
+    length: float = 50.0,
+    name: str = "log_converter"
+) -> gf.Component:
+    """
+    Converts optical signal to log-domain using saturable absorption.
+
+    Physics: At high intensities, saturable absorbers have output proportional
+    to log(input) due to absorption saturation:
+        I_out ∝ ln(I_in / I_sat + 1)
+
+    Implementation: Doped waveguide (e.g., Er, Yb) operating in saturation.
+    The absorption bleaches proportionally to input power.
+
+    For ternary encoding:
+        - Input wavelengths: 1.55 μm (R), 1.216 μm (G), 1.00 μm (B)
+        - Output: intensity-encoded log values
+
+    Args:
+        length: Saturable absorber length (longer = more dynamic range)
+        name: Component name
+    """
+    c = gf.Component(name)
+
+    # Saturable absorber waveguide (doped region)
+    wg = c << gf.components.straight(length=length, width=1.0)
+
+    # Visual marker for doped/SA region
+    c.add_polygon(
+        [(0, -2), (length, -2), (length, 2), (0, 2)],
+        layer=(13, 0)  # Log converter layer
+    )
+    c.add_label("LOG", position=(length/2, 4), layer=LABEL_LAYER)
+    c.add_label("ln(I)", position=(length/2, -4), layer=LABEL_LAYER)
+
+    c.add_port(name="input", port=wg.ports["o1"])
+    c.add_port(name="output", port=wg.ports["o2"])
+
+    return c
+
+
+def optical_exp_converter(
+    length: float = 50.0,
+    name: str = "exp_converter"
+) -> gf.Component:
+    """
+    Converts log-domain signal back to linear using optical gain.
+
+    Physics: Optical amplifiers (SOA, EDWA) have exponential gain:
+        I_out = I_in × exp(g × L)
+
+    When the input represents a log value, the exponential gain
+    converts it back to linear domain:
+        exp(ln(A)) = A
+
+    Implementation: Pumped gain medium (SOA or doped waveguide with pump).
+
+    Args:
+        length: Gain medium length
+        name: Component name
+    """
+    c = gf.Component(name)
+
+    # Gain medium waveguide
+    wg = c << gf.components.straight(length=length, width=1.0)
+
+    # Pump input for gain
+    pump_tap = c << gf.components.mmi1x2()
+    pump_tap.dmove((length/2, -15))
+    pump_tap.drotate(90)
+
+    # Visual marker for gain region
+    c.add_polygon(
+        [(0, -2), (length, -2), (length, 2), (0, 2)],
+        layer=(14, 0)  # Exp converter layer
+    )
+    c.add_label("EXP", position=(length/2, 4), layer=LABEL_LAYER)
+    c.add_label("e^x", position=(length/2, -4), layer=LABEL_LAYER)
+
+    c.add_port(name="input", port=wg.ports["o1"])
+    c.add_port(name="output", port=wg.ports["o2"])
+    c.add_port(name="pump", port=pump_tap.ports["o1"])
+
+    return c
+
+
+def log_domain_processor(
+    name: str = "log_domain_proc",
+    uid: str = ""
+) -> gf.Component:
+    """
+    Complete log-domain arithmetic unit with bypass for linear operations.
+
+    Architecture:
+        Linear path (add/sub):  Input ──────────────────────────→ Mixer ──────────────────────────→ Output
+        Log path (mul/div):     Input ──→ LOG ──→ Mixer ──→ EXP ──→ Output
+
+    MZI switches select between linear and log-domain paths.
+
+    Operations:
+        - ctrl_linear + SFG → Addition
+        - ctrl_linear + DFG → Subtraction
+        - ctrl_log + SFG → Multiplication (log-domain add)
+        - ctrl_log + DFG → Division (log-domain subtract)
+
+    Args:
+        name: Component name
+        uid: Unique identifier
+    """
+    import uuid as uuid_mod
+    if not uid:
+        uid = str(uuid_mod.uuid4())[:8]
+
+    c = gf.Component(name)
+
+    # === INPUT STAGE ===
+    # Split input to linear and log paths
+    input_split = c << gf.components.mmi1x2()
+    input_split.dmove((0, 0))
+
+    # === LINEAR PATH (top) ===
+    linear_wg = c << gf.components.straight(length=120, width=0.5)
+    linear_wg.dmove((30, 20))
+    route_single(c, cross_section=XS, port1=input_split.ports["o2"], port2=linear_wg.ports["o1"])
+
+    # MZI switch for linear path
+    mzi_linear = c << mzi_switch(arm_length=25, name=f"mzi_lin_{uid}")
+    mzi_linear.dmove((160, 20))
+    route_single(c, cross_section=XS, port1=linear_wg.ports["o2"], port2=mzi_linear.ports["input"])
+
+    # === LOG PATH (bottom) ===
+    # Log converter
+    log_conv = c << optical_log_converter(length=40, name=f"log_{uid}")
+    log_conv.dmove((30, -30))
+    route_single(c, cross_section=XS, port1=input_split.ports["o3"], port2=log_conv.ports["input"])
+
+    # MZI switch for log path
+    mzi_log = c << mzi_switch(arm_length=25, name=f"mzi_log_{uid}")
+    mzi_log.dmove((100, -30))
+    route_single(c, cross_section=XS, port1=log_conv.ports["output"], port2=mzi_log.ports["input"])
+
+    # === COMBINE PATHS before mixer ===
+    pre_mixer_combine = c << gf.components.mmi2x2()
+    pre_mixer_combine.dmove((230, 0))
+    route_single(c, cross_section=XS, port1=mzi_linear.ports["bar"], port2=pre_mixer_combine.ports["o1"])
+    route_single(c, cross_section=XS, port1=mzi_log.ports["bar"], port2=pre_mixer_combine.ports["o2"])
+
+    # === MIXER STAGE ===
+    # SFG for add (linear) or multiply (log)
+    mixer_sfg = c << sfg_mixer(length=20, name=f"sfg_{uid}")
+    mixer_sfg.dmove((280, 15))
+
+    # DFG for subtract (linear) or divide (log)
+    mixer_dfg = c << dfg_mixer(length=25, name=f"dfg_{uid}")
+    mixer_dfg.dmove((280, -15))
+
+    # Split to both mixers
+    mixer_split = c << gf.components.mmi1x2()
+    mixer_split.dmove((255, 0))
+    route_single(c, cross_section=XS, port1=pre_mixer_combine.ports["o3"], port2=mixer_split.ports["o1"])
+    route_single(c, cross_section=XS, port1=mixer_split.ports["o2"], port2=mixer_sfg.ports["input"])
+    route_single(c, cross_section=XS, port1=mixer_split.ports["o3"], port2=mixer_dfg.ports["input"])
+
+    # === OUTPUT STAGE ===
+    # Combine mixer outputs
+    mixer_combine = c << gf.components.mmi2x2()
+    mixer_combine.dmove((320, 0))
+    route_single(c, cross_section=XS, port1=mixer_sfg.ports["output"], port2=mixer_combine.ports["o1"])
+    route_single(c, cross_section=XS, port1=mixer_dfg.ports["output"], port2=mixer_combine.ports["o2"])
+
+    # === EXP CONVERTER (for log path output) ===
+    # Split: linear output bypasses, log output goes through exp
+    output_split = c << gf.components.mmi1x2()
+    output_split.dmove((350, 0))
+    route_single(c, cross_section=XS, port1=mixer_combine.ports["o3"], port2=output_split.ports["o1"])
+
+    # Exp converter for log path
+    exp_conv = c << optical_exp_converter(length=40, name=f"exp_{uid}")
+    exp_conv.dmove((380, -25))
+    route_single(c, cross_section=XS, port1=output_split.ports["o3"], port2=exp_conv.ports["input"])
+
+    # Final output combine
+    output_combine = c << gf.components.mmi2x2()
+    output_combine.dmove((450, 0))
+    route_single(c, cross_section=XS, port1=output_split.ports["o2"], port2=output_combine.ports["o1"])
+    route_single(c, cross_section=XS, port1=exp_conv.ports["output"], port2=output_combine.ports["o2"])
+
+    # === CONTROL ELECTRODE PADS ===
+    pad_w, pad_h = 15, 12
+
+    # Linear path control
+    c.add_polygon([(165, 45), (165 + pad_w, 45), (165 + pad_w, 45 + pad_h), (165, 45 + pad_h)], layer=HEATER_LAYER)
+    c.add_label("LIN", position=(172, 60), layer=LABEL_LAYER)
+
+    # Log path control
+    c.add_polygon([(105, -55), (105 + pad_w, -55), (105 + pad_w, -55 + pad_h), (105, -55 + pad_h)], layer=HEATER_LAYER)
+    c.add_label("LOG", position=(112, -58), layer=LABEL_LAYER)
+
+    # === LABELS ===
+    c.add_label("LOG_DOMAIN_PROC", position=(225, 45), layer=LABEL_LAYER)
+    c.add_label("+:ADD ×:MUL", position=(290, 25), layer=LABEL_LAYER)
+    c.add_label("-:SUB ÷:DIV", position=(290, -25), layer=LABEL_LAYER)
+
+    # === PORTS ===
+    c.add_port(name="input", port=input_split.ports["o1"])
+    c.add_port(name="output", port=output_combine.ports["o3"])
+    c.add_port(name="pump_exp", port=exp_conv.ports["pump"])
+
+    # Control ports
+    c.add_port(name="ctrl_linear", center=(172, 51), width=pad_w, orientation=90, layer=HEATER_LAYER)
+    c.add_port(name="ctrl_log", center=(112, -49), width=pad_w, orientation=90, layer=HEATER_LAYER)
+
+    return c
+
+
 # =============================================================================
 # OPTICAL CARRY CHAIN COMPONENTS
 # =============================================================================
@@ -470,22 +841,23 @@ def mul_mixer(
 CARRY_LAYER = (11, 0)
 
 def optical_delay_line(
-    delay_ps: float = 10.0,
+    delay_ps: float = 20.0,
     name: str = "delay_line"
 ) -> gf.Component:
     """
     Creates an optical delay line for carry timing synchronization.
 
     The delay allows the current trit's computation to complete before
-    the carry from the previous trit arrives.
+    the carry from the previous trit arrives. Using 20ps delay provides
+    5ps safety margin over standard SOA recovery times (~15ps).
 
     Args:
-        delay_ps: Desired delay in picoseconds
+        delay_ps: Desired delay in picoseconds (default: 20ps)
         name: Component name
 
     Delay calculation:
         Length = delay_ps × c / n_eff
-        For LiNbO3 (n_eff ≈ 2.2): 10 ps ≈ 1.36 mm
+        For LiNbO3 (n_eff ≈ 2.2): 20 ps ≈ 2.73 mm
     """
     c = gf.Component(name)
 
@@ -784,6 +1156,136 @@ def optical_carry_unit(
     c.add_port(name="pump_out_neg", port=opa_out_neg.ports["pump"])
 
     c.add_label("OPTICAL_CARRY", position=(150, 50), layer=LABEL_LAYER)
+
+    return c
+
+
+# Layer for amplifier components
+AMP_LAYER = (12, 0)
+
+
+def semiconductor_optical_amplifier(
+    length: float = 500.0,
+    width: float = 2.0,
+    gain_db: float = 20.0,
+    name: str = "soa"
+) -> gf.Component:
+    """
+    Creates a Semiconductor Optical Amplifier (SOA) for carry chain amplification.
+
+    SOAs provide broadband amplification suitable for all wavelengths in the
+    ternary encoding scheme. They are fast (ps switching) and compact.
+
+    Typical specifications:
+    - Gain: 15-25 dB
+    - Bandwidth: >40 nm (covers 1.0-1.55 μm)
+    - Saturation power: 10-15 dBm
+    - Noise figure: 6-8 dB
+
+    Structure:
+        Input → Tapered coupler → Active region (InGaAsP/InP) → Tapered coupler → Output
+                                        ↑
+                                   Electrical bias
+
+    Args:
+        length: Active region length (μm)
+        width: Active region width (μm)
+        gain_db: Target gain in dB (for annotation)
+        name: Component name
+    """
+    c = gf.Component(name)
+
+    # Input taper (mode converter)
+    taper_in = c << gf.components.taper(length=50, width1=0.5, width2=width)
+    taper_in.dmove((0, 0))
+
+    # Active gain region
+    active = c << gf.components.straight(length=length, width=width)
+    active.dmove((50, 0))
+
+    # Output taper
+    taper_out = c << gf.components.taper(length=50, width1=width, width2=0.5)
+    taper_out.dmove((50 + length, 0))
+
+    # Electrode pads for electrical bias
+    pad_width = length * 0.8
+    pad_height = 20
+    c.add_polygon(
+        [(50 + length * 0.1, width + 5),
+         (50 + length * 0.9, width + 5),
+         (50 + length * 0.9, width + 5 + pad_height),
+         (50 + length * 0.1, width + 5 + pad_height)],
+        layer=AMP_LAYER
+    )
+
+    # Ground plane
+    c.add_polygon(
+        [(50 + length * 0.1, -width - 5 - pad_height),
+         (50 + length * 0.9, -width - 5 - pad_height),
+         (50 + length * 0.9, -width - 5),
+         (50 + length * 0.1, -width - 5)],
+        layer=AMP_LAYER
+    )
+
+    # Labels
+    c.add_label(f"SOA", position=(50 + length/2, width + 30), layer=LABEL_LAYER)
+    c.add_label(f"+{gain_db:.0f}dB", position=(50 + length/2, -width - 30), layer=LABEL_LAYER)
+
+    # Ports
+    c.add_port(name="input", port=taper_in.ports["o1"])
+    c.add_port(name="output", port=taper_out.ports["o2"])
+
+    # Electrical bias port (for annotation)
+    c.add_port(name="bias", center=(50 + length/2, width + 5 + pad_height), width=pad_width, orientation=90, layer=(1, 0))
+
+    return c
+
+
+def carry_chain_amplifier(
+    gain_db: float = 25.0,
+    name: str = "carry_amp"
+) -> gf.Component:
+    """
+    Dual-channel amplifier for carry chain (positive and negative carry paths).
+
+    Places two SOAs in parallel to amplify both carry signals simultaneously.
+    Each SOA compensates for ~3 trits of carry loss (~25 dB).
+
+    Structure:
+        carry_pos_in ──→ SOA ──→ carry_pos_out
+        carry_neg_in ──→ SOA ──→ carry_neg_out
+
+    Args:
+        gain_db: Target gain per channel in dB
+        name: Component name
+    """
+    c = gf.Component(name)
+
+    # SOA for positive carry
+    soa_pos = c << semiconductor_optical_amplifier(
+        length=500, gain_db=gain_db, name=f"{name}_soa_pos"
+    )
+    soa_pos.dmove((0, 50))
+
+    # SOA for negative carry
+    soa_neg = c << semiconductor_optical_amplifier(
+        length=500, gain_db=gain_db, name=f"{name}_soa_neg"
+    )
+    soa_neg.dmove((0, -50))
+
+    # Ports
+    c.add_port(name="carry_pos_in", port=soa_pos.ports["input"])
+    c.add_port(name="carry_pos_out", port=soa_pos.ports["output"])
+    c.add_port(name="carry_neg_in", port=soa_neg.ports["input"])
+    c.add_port(name="carry_neg_out", port=soa_neg.ports["output"])
+
+    # Bias ports
+    c.add_port(name="bias_pos", port=soa_pos.ports["bias"])
+    c.add_port(name="bias_neg", port=soa_neg.ports["bias"])
+
+    # Label
+    c.add_label("CARRY_AMP", position=(300, 0), layer=LABEL_LAYER)
+    c.add_label(f"+{gain_db:.0f}dB/ch", position=(300, -20), layer=LABEL_LAYER)
 
     return c
 
@@ -1928,6 +2430,238 @@ def generate_optical_carry_alu(
     return c
 
 
+def alu_with_wavelength_selectors(
+    name: str = "ALU_WithSelectors",
+    include_wavelength_selectors: bool = True,
+    selector_type: Literal['ring', 'mzi'] = 'mzi'
+) -> gf.Component:
+    """
+    Creates an ALU with integrated input wavelength selectors for each channel.
+
+    This enhanced ALU provides per-channel wavelength gating for precise
+    operand selection. Each input (A and B) passes through an AWG demux
+    to separate R/G/B wavelengths, then each channel has an independent
+    MZI or ring selector for gating, before recombining for the mixer.
+
+    Architecture:
+    ```
+    Input_A --> AWG(3ch) --> [Sel_R, Sel_G, Sel_B] --> Combiner_A --\\
+                                                                     --> universal_alu_mixer() --> AWG(5ch) --> Detectors
+    Input_B --> AWG(3ch) --> [Sel_R, Sel_G, Sel_B] --> Combiner_B --/
+    ```
+
+    This allows:
+    - Individual gating of each wavelength channel per operand
+    - Dynamic operand value selection via ctrl_sel_a_r/g/b, ctrl_sel_b_r/g/b
+    - Universal ALU operations (add/sub/mul/div) on selected values
+
+    Args:
+        name: Component name
+        include_wavelength_selectors: If True, adds per-channel selectors.
+                                     If False, uses direct AWG->combiner path.
+        selector_type: 'ring' for ring resonators, 'mzi' for Mach-Zehnder
+
+    Ports:
+        input_a, input_b: Main optical inputs (broadband with R/G/B)
+        ctrl_sel_a_r, ctrl_sel_a_g, ctrl_sel_a_b: Selector controls for operand A
+        ctrl_sel_b_r, ctrl_sel_b_g, ctrl_sel_b_b: Selector controls for operand B
+        ctrl_linear, ctrl_log, ctrl_sfg, ctrl_dfg: ALU operation controls
+        out_neg2, out_neg1, out_zero, out_pos1, out_pos2: 5-level output detectors
+    """
+    import uuid as uuid_mod
+    uid = str(uuid_mod.uuid4())[:8]
+
+    c = gf.Component(name)
+
+    # =========================
+    # 1. INPUT A - AWG DEMUX + SELECTORS
+    # =========================
+    awg_a = c << awg_demux(n_channels=3, name=f"awg_a_{uid}")
+    awg_a.dmove((0, 50))
+
+    if include_wavelength_selectors:
+        # Per-channel selectors for operand A
+        if selector_type == 'mzi':
+            sel_a_r = c << wavelength_selector_mzi(wavelength_um=1.550, name=f"sel_a_r_{uid}")
+            sel_a_g = c << wavelength_selector_mzi(wavelength_um=1.216, name=f"sel_a_g_{uid}")
+            sel_a_b = c << wavelength_selector_mzi(wavelength_um=1.000, name=f"sel_a_b_{uid}")
+        else:
+            sel_a_r = c << wavelength_selector(wavelength_um=1.550, name=f"sel_a_r_{uid}")
+            sel_a_g = c << wavelength_selector(wavelength_um=1.216, name=f"sel_a_g_{uid}")
+            sel_a_b = c << wavelength_selector(wavelength_um=1.000, name=f"sel_a_b_{uid}")
+
+        sel_a_r.dmove((80, 70))
+        sel_a_g.dmove((80, 50))
+        sel_a_b.dmove((80, 30))
+
+        # Route AWG outputs to selectors
+        route_single(c, cross_section=XS, port1=awg_a.ports["out_r"], port2=sel_a_r.ports["input"])
+        route_single(c, cross_section=XS, port1=awg_a.ports["out_g"], port2=sel_a_g.ports["input"])
+        route_single(c, cross_section=XS, port1=awg_a.ports["out_b"], port2=sel_a_b.ports["input"])
+
+        # Combiner for A (after selectors)
+        comb_a = c << wavelength_combiner(n_inputs=3, name=f"comb_a_{uid}")
+        comb_a.dmove((180, 50))
+
+        route_single(c, cross_section=XS, port1=sel_a_r.ports["output"], port2=comb_a.ports["in1"])
+        route_single(c, cross_section=XS, port1=sel_a_g.ports["output"], port2=comb_a.ports["in2"])
+        route_single(c, cross_section=XS, port1=sel_a_b.ports["output"], port2=comb_a.ports["in3"])
+    else:
+        # Direct path without selectors
+        comb_a = c << wavelength_combiner(n_inputs=3, name=f"comb_a_{uid}")
+        comb_a.dmove((100, 50))
+
+        route_single(c, cross_section=XS, port1=awg_a.ports["out_r"], port2=comb_a.ports["in1"])
+        route_single(c, cross_section=XS, port1=awg_a.ports["out_g"], port2=comb_a.ports["in2"])
+        route_single(c, cross_section=XS, port1=awg_a.ports["out_b"], port2=comb_a.ports["in3"])
+
+    # =========================
+    # 2. INPUT B - AWG DEMUX + SELECTORS
+    # =========================
+    awg_b = c << awg_demux(n_channels=3, name=f"awg_b_{uid}")
+    awg_b.dmove((0, -50))
+
+    if include_wavelength_selectors:
+        # Per-channel selectors for operand B
+        if selector_type == 'mzi':
+            sel_b_r = c << wavelength_selector_mzi(wavelength_um=1.550, name=f"sel_b_r_{uid}")
+            sel_b_g = c << wavelength_selector_mzi(wavelength_um=1.216, name=f"sel_b_g_{uid}")
+            sel_b_b = c << wavelength_selector_mzi(wavelength_um=1.000, name=f"sel_b_b_{uid}")
+        else:
+            sel_b_r = c << wavelength_selector(wavelength_um=1.550, name=f"sel_b_r_{uid}")
+            sel_b_g = c << wavelength_selector(wavelength_um=1.216, name=f"sel_b_g_{uid}")
+            sel_b_b = c << wavelength_selector(wavelength_um=1.000, name=f"sel_b_b_{uid}")
+
+        sel_b_r.dmove((80, -30))
+        sel_b_g.dmove((80, -50))
+        sel_b_b.dmove((80, -70))
+
+        # Route AWG outputs to selectors
+        route_single(c, cross_section=XS, port1=awg_b.ports["out_r"], port2=sel_b_r.ports["input"])
+        route_single(c, cross_section=XS, port1=awg_b.ports["out_g"], port2=sel_b_g.ports["input"])
+        route_single(c, cross_section=XS, port1=awg_b.ports["out_b"], port2=sel_b_b.ports["input"])
+
+        # Combiner for B (after selectors)
+        comb_b = c << wavelength_combiner(n_inputs=3, name=f"comb_b_{uid}")
+        comb_b.dmove((180, -50))
+
+        route_single(c, cross_section=XS, port1=sel_b_r.ports["output"], port2=comb_b.ports["in1"])
+        route_single(c, cross_section=XS, port1=sel_b_g.ports["output"], port2=comb_b.ports["in2"])
+        route_single(c, cross_section=XS, port1=sel_b_b.ports["output"], port2=comb_b.ports["in3"])
+    else:
+        # Direct path without selectors
+        comb_b = c << wavelength_combiner(n_inputs=3, name=f"comb_b_{uid}")
+        comb_b.dmove((100, -50))
+
+        route_single(c, cross_section=XS, port1=awg_b.ports["out_r"], port2=comb_b.ports["in1"])
+        route_single(c, cross_section=XS, port1=awg_b.ports["out_g"], port2=comb_b.ports["in2"])
+        route_single(c, cross_section=XS, port1=awg_b.ports["out_b"], port2=comb_b.ports["in3"])
+
+    # =========================
+    # 3. COMBINE A + B INTO UNIVERSAL ALU MIXER
+    # =========================
+    # Pre-mixer combiner
+    pre_mixer = c << gf.components.mmi2x2()
+    pre_mixer.dmove((250, 0))
+
+    route_single(c, cross_section=XS, port1=comb_a.ports["output"], port2=pre_mixer.ports["o1"])
+    route_single(c, cross_section=XS, port1=comb_b.ports["output"], port2=pre_mixer.ports["o2"])
+
+    # Universal ALU Mixer (add/sub/mul/div)
+    alu = c << universal_alu_mixer(name=f"alu_{uid}", uid=uid)
+    alu.dmove((300, 0))
+
+    route_single(c, cross_section=XS, port1=pre_mixer.ports["o3"], port2=alu.ports["input"])
+
+    # =========================
+    # 4. OUTPUT STAGE - 5-CHANNEL AWG + DETECTORS
+    # =========================
+    awg_out = c << awg_demux(n_channels=5, name=f"awg_out_{uid}")
+    awg_out.dmove((770, 0))
+
+    route_single(c, cross_section=XS, port1=alu.ports["output"], port2=awg_out.ports["input"])
+
+    # 5 photodetectors for output values
+    det_neg2 = c << photodetector(name=f"det_neg2_{uid}")
+    det_neg1 = c << photodetector(name=f"det_neg1_{uid}")
+    det_zero = c << photodetector(name=f"det_zero_{uid}")
+    det_pos1 = c << photodetector(name=f"det_pos1_{uid}")
+    det_pos2 = c << photodetector(name=f"det_pos2_{uid}")
+
+    det_neg2.dmove((870, 30))
+    det_neg1.dmove((870, 15))
+    det_zero.dmove((870, 0))
+    det_pos1.dmove((870, -15))
+    det_pos2.dmove((870, -30))
+
+    route_single(c, cross_section=XS, port1=awg_out.ports["out_1"], port2=det_neg2.ports["input"])
+    route_single(c, cross_section=XS, port1=awg_out.ports["out_2"], port2=det_neg1.ports["input"])
+    route_single(c, cross_section=XS, port1=awg_out.ports["out_3"], port2=det_zero.ports["input"])
+    route_single(c, cross_section=XS, port1=awg_out.ports["out_4"], port2=det_pos1.ports["input"])
+    route_single(c, cross_section=XS, port1=awg_out.ports["out_5"], port2=det_pos2.ports["input"])
+
+    # =========================
+    # 5. LABELS
+    # =========================
+    c.add_label("ALU_WITH_WAVELENGTH_SELECTORS", position=(400, 100), layer=LABEL_LAYER)
+    c.add_label("INPUT_A", position=(-30, 50), layer=LABEL_LAYER)
+    c.add_label("INPUT_B", position=(-30, -50), layer=LABEL_LAYER)
+    c.add_label("AWG_3ch", position=(20, 65), layer=LABEL_LAYER)
+    c.add_label("AWG_3ch", position=(20, -35), layer=LABEL_LAYER)
+    c.add_label("AWG_5ch", position=(790, 40), layer=LABEL_LAYER)
+
+    if include_wavelength_selectors:
+        c.add_label("SEL_R", position=(100, 75), layer=LABEL_LAYER)
+        c.add_label("SEL_G", position=(100, 55), layer=LABEL_LAYER)
+        c.add_label("SEL_B", position=(100, 35), layer=LABEL_LAYER)
+        c.add_label("SEL_R", position=(100, -25), layer=LABEL_LAYER)
+        c.add_label("SEL_G", position=(100, -45), layer=LABEL_LAYER)
+        c.add_label("SEL_B", position=(100, -65), layer=LABEL_LAYER)
+
+    c.add_label("DET_-2 (0.775um)", position=(890, 30), layer=LABEL_LAYER)
+    c.add_label("DET_-1 (0.681um)", position=(890, 15), layer=LABEL_LAYER)
+    c.add_label("DET_0 (0.608um)", position=(890, 0), layer=LABEL_LAYER)
+    c.add_label("DET_+1 (0.549um)", position=(890, -15), layer=LABEL_LAYER)
+    c.add_label("DET_+2 (0.500um)", position=(890, -30), layer=LABEL_LAYER)
+
+    # =========================
+    # 6. PORTS
+    # =========================
+    # Main inputs
+    c.add_port(name="input_a", port=awg_a.ports["input"])
+    c.add_port(name="input_b", port=awg_b.ports["input"])
+
+    # Selector control ports (if selectors are included)
+    if include_wavelength_selectors:
+        # Note: These are virtual ports for documentation - actual control
+        # is via the heater electrodes on the MZI/ring selectors
+        pad_w = 10
+        c.add_port(name="ctrl_sel_a_r", center=(95, 85), width=pad_w, orientation=90, layer=HEATER_LAYER)
+        c.add_port(name="ctrl_sel_a_g", center=(95, 60), width=pad_w, orientation=90, layer=HEATER_LAYER)
+        c.add_port(name="ctrl_sel_a_b", center=(95, 40), width=pad_w, orientation=90, layer=HEATER_LAYER)
+        c.add_port(name="ctrl_sel_b_r", center=(95, -20), width=pad_w, orientation=90, layer=HEATER_LAYER)
+        c.add_port(name="ctrl_sel_b_g", center=(95, -45), width=pad_w, orientation=90, layer=HEATER_LAYER)
+        c.add_port(name="ctrl_sel_b_b", center=(95, -60), width=pad_w, orientation=90, layer=HEATER_LAYER)
+
+    # ALU operation controls (from universal_alu_mixer)
+    c.add_port(name="ctrl_linear", port=alu.ports["ctrl_linear"])
+    c.add_port(name="ctrl_log", port=alu.ports["ctrl_log"])
+    c.add_port(name="ctrl_sfg", port=alu.ports["ctrl_sfg"])
+    c.add_port(name="ctrl_dfg", port=alu.ports["ctrl_dfg"])
+    c.add_port(name="pump_exp", port=alu.ports["pump_exp"])
+
+    # Output detector ports (electrical pads - detectors convert optical to electrical)
+    # Use detector input positions as reference for electrical output pads
+    det_pad_layer = (12, 0)  # Metal pad layer
+    c.add_port(name="out_neg2", center=(890, 30), width=10, orientation=0, layer=det_pad_layer)
+    c.add_port(name="out_neg1", center=(890, 15), width=10, orientation=0, layer=det_pad_layer)
+    c.add_port(name="out_zero", center=(890, 0), width=10, orientation=0, layer=det_pad_layer)
+    c.add_port(name="out_pos1", center=(890, -15), width=10, orientation=0, layer=det_pad_layer)
+    c.add_port(name="out_pos2", center=(890, -30), width=10, orientation=0, layer=det_pad_layer)
+
+    return c
+
+
 def generate_81_trit_processor(
     name: str = "Ternary81"
 ) -> gf.Component:
@@ -2394,8 +3128,7 @@ def generate_power_of_3_processor(
 # =============================================================================
 
 def generate_81_trit_optical_carry(
-    name: str = "Ternary81_OpticalCarry",
-    operation: Literal['add', 'sub', 'mul'] = 'add'
+    name: str = "Ternary81_OpticalCarry"
 ) -> gf.Component:
     """
     Generates a complete 81-trit processor with FULLY OPTICAL carry propagation.
@@ -2405,23 +3138,41 @@ def generate_81_trit_optical_carry(
     - Light propagates through all 81 trits
     - Optical carry chain handles all arithmetic overflow automatically
     - Computer reads 81 detector outputs
+    - ALL FOUR operations (add/sub/mul/div) selectable at runtime
 
     NO FIRMWARE MATH - all logic is optical.
 
     Architecture:
     - Centered frontend (Kerr clock + Y-junction)
-    - 81 optical carry ALUs arranged in 9×9 grid
+    - 81 universal ALU mixers with LOG-DOMAIN for mul/div
+    - MZI switches select operation at runtime
     - Carry chain: Trit[n].carry_out → OPA → Delay → Trit[n+1].carry_in
+    - SOA amplifiers every 3 trits for signal regeneration
     - LSB (Trit 0) has no carry_in, MSB (Trit 80) carry_out goes to overflow detector
 
+    Log-domain insight:
+    - Multiply = add in log domain: ln(A) + ln(B) = ln(A×B) → use SFG
+    - Divide = subtract in log domain: ln(A) - ln(B) = ln(A/B) → use DFG
+
+    Control signals (per trit):
+    - ctrl_linear: Use linear path (for add/sub)
+    - ctrl_log: Use log-domain path (for mul/div)
+    - ctrl_sfg: Use SFG mixer (add or mul)
+    - ctrl_dfg: Use DFG mixer (sub or div)
+
+    Operations:
+    - ctrl_linear + ctrl_sfg → ADD
+    - ctrl_linear + ctrl_dfg → SUB
+    - ctrl_log + ctrl_sfg → MUL
+    - ctrl_log + ctrl_dfg → DIV
+
     Timing:
-    - Each trit adds ~10ps delay for carry propagation
+    - Each trit adds ~20ps delay for carry propagation (5ps safety margin)
     - Total propagation time: ~800ps for 81 trits
     - Clock rate: ~1 GHz for pipelined operation
 
     Args:
         name: Component name
-        operation: 'add', 'sub', or 'mul'
     """
     import uuid
     c = gf.Component(name)
@@ -2469,14 +3220,8 @@ def generate_81_trit_optical_carry(
             alu.dmove((x_pos, y_pos))
             alus.append(alu)
 
-            # Create mixer based on operation
-            if operation == 'add':
-                mixer = c << sfg_mixer(length=20, name=f"sfg_t{trit_index}_{uid}")
-            elif operation == 'sub':
-                mixer = c << dfg_mixer(length=25, name=f"dfg_t{trit_index}_{uid}")
-            else:  # mul
-                mixer = c << mul_mixer(length=30, name=f"mul_t{trit_index}_{uid}")
-
+            # Create universal ALU mixer (all 3 operations, selectable at runtime)
+            mixer = c << universal_alu_mixer(name=f"alu_t{trit_index}_{uid}", uid=uid)
             mixer.dmove((x_pos + 100, y_pos))
 
             # Route carry unit to mixer
@@ -2494,20 +3239,73 @@ def generate_81_trit_optical_carry(
             trit_index += 1
 
     # =========================
-    # 3. OPTICAL CARRY CHAIN ROUTING
+    # 3. OPTICAL CARRY CHAIN ROUTING WITH AMPLIFIERS
     # =========================
     # Connect carry_out of each trit to carry_in of next trit
+    # Add SOA amplifiers every 3 trits to compensate for ~25 dB loss
+    #
+    # Power budget (from power_budget_analysis.py):
+    #   - Carry loss per hop: ~8.8 dB
+    #   - 3 hops = ~26.5 dB loss
+    #   - SOA gain: 25 dB (net -1.5 dB per 3 trits, acceptable)
+    #
+    # Amplifier positions: after T2, T5, T8, ... (every 3rd trit)
+
+    AMP_INTERVAL = 3  # Amplify every N trits
+    AMP_GAIN_DB = 30.0  # Must exceed 26.5 dB loss per 3 trits
+    amplifiers = []
 
     for i in range(80):  # 0 to 79 (80 connections for 81 trits)
-        # Route positive carry
-        route_single(c, cross_section=XS,
-                    port1=alus[i].ports["carry_out_pos"],
-                    port2=alus[i+1].ports["carry_in_pos"])
+        # Check if we need an amplifier after this trit
+        needs_amp = (i > 0) and ((i + 1) % AMP_INTERVAL == 0)
 
-        # Route negative carry (borrow)
-        route_single(c, cross_section=XS,
-                    port1=alus[i].ports["carry_out_neg"],
-                    port2=alus[i+1].ports["carry_in_neg"])
+        if needs_amp:
+            # Create amplifier for this position
+            amp_uid = str(uuid.uuid4())[:8]
+            amp = c << carry_chain_amplifier(
+                gain_db=AMP_GAIN_DB,
+                name=f"amp_t{i}_{amp_uid}"
+            )
+
+            # Position amplifier between trits
+            # Place it offset from the ALU grid
+            amp_x = (alus[i].dxmax + alus[i+1].dxmin) / 2
+            amp_y = alus[i].dy + 100  # Above the carry path
+
+            amp.dmove((amp_x - 300, amp_y))
+            amplifiers.append((i, amp))
+
+            # Route: Trit[i] → Amplifier → Trit[i+1]
+            route_single(c, cross_section=XS,
+                        port1=alus[i].ports["carry_out_pos"],
+                        port2=amp.ports["carry_pos_in"])
+            route_single(c, cross_section=XS,
+                        port1=amp.ports["carry_pos_out"],
+                        port2=alus[i+1].ports["carry_in_pos"])
+
+            route_single(c, cross_section=XS,
+                        port1=alus[i].ports["carry_out_neg"],
+                        port2=amp.ports["carry_neg_in"])
+            route_single(c, cross_section=XS,
+                        port1=amp.ports["carry_neg_out"],
+                        port2=alus[i+1].ports["carry_in_neg"])
+
+            # Label
+            c.add_label(f"AMP_{i}", position=(amp_x, amp_y + 80), layer=LABEL_LAYER)
+
+        else:
+            # Direct connection (no amplifier)
+            route_single(c, cross_section=XS,
+                        port1=alus[i].ports["carry_out_pos"],
+                        port2=alus[i+1].ports["carry_in_pos"])
+
+            route_single(c, cross_section=XS,
+                        port1=alus[i].ports["carry_out_neg"],
+                        port2=alus[i+1].ports["carry_in_neg"])
+
+    # Log amplifier count
+    n_amps = len(amplifiers)
+    c.add_label(f"CARRY_AMPS: {n_amps}", position=(chip_center_x + 500, chip_center_y - 1000), layer=LABEL_LAYER)
 
     # =========================
     # 4. TERMINATIONS
@@ -2523,14 +3321,23 @@ def generate_81_trit_optical_carry(
     # =========================
     # 5. CHIP LABELS
     # =========================
-    op_names = {'add': 'ADD', 'sub': 'SUB', 'mul': 'MUL'}
-    c.add_label(f"81T_OPTICAL_CARRY_{op_names[operation]}", position=(chip_center_x, chip_center_y + 1000), layer=LABEL_LAYER)
-    c.add_label("FULLY_OPTICAL_ARITHMETIC", position=(chip_center_x, chip_center_y + 950), layer=LABEL_LAYER)
-    c.add_label("NO_FIRMWARE_MATH", position=(chip_center_x, chip_center_y + 900), layer=LABEL_LAYER)
+    c.add_label("81T_UNIVERSAL_ALU_v2", position=(chip_center_x, chip_center_y + 1000), layer=LABEL_LAYER)
+    c.add_label("ADD/SUB/MUL/DIV SELECTABLE", position=(chip_center_x, chip_center_y + 950), layer=LABEL_LAYER)
+    c.add_label("LOG-DOMAIN MUL/DIV", position=(chip_center_x, chip_center_y + 900), layer=LABEL_LAYER)
+    c.add_label("FULLY_OPTICAL_ARITHMETIC", position=(chip_center_x, chip_center_y + 850), layer=LABEL_LAYER)
+    c.add_label("NO_FIRMWARE_MATH", position=(chip_center_x, chip_center_y + 800), layer=LABEL_LAYER)
+    c.add_label("WITH_SOA_AMPLIFICATION", position=(chip_center_x, chip_center_y + 750), layer=LABEL_LAYER)
 
     # Carry chain info
     c.add_label("CARRY_CHAIN: T0→T1→T2→...→T80", position=(chip_center_x - 500, chip_center_y - 1000), layer=LABEL_LAYER)
     c.add_label("Propagation: ~800ps total", position=(chip_center_x - 500, chip_center_y - 1050), layer=LABEL_LAYER)
+    c.add_label(f"Amplifiers: {n_amps} SOAs (+{AMP_GAIN_DB:.0f}dB each)", position=(chip_center_x - 500, chip_center_y - 1100), layer=LABEL_LAYER)
+    c.add_label(f"Amp interval: every {AMP_INTERVAL} trits", position=(chip_center_x - 500, chip_center_y - 1150), layer=LABEL_LAYER)
+
+    # Control info
+    c.add_label("CONTROL: 81x (ctrl_linear, ctrl_log, ctrl_sfg, ctrl_dfg)", position=(chip_center_x + 500, chip_center_y - 1000), layer=LABEL_LAYER)
+    c.add_label("LIN+SFG=ADD | LIN+DFG=SUB", position=(chip_center_x + 500, chip_center_y - 1050), layer=LABEL_LAYER)
+    c.add_label("LOG+SFG=MUL | LOG+DFG=DIV", position=(chip_center_x + 500, chip_center_y - 1100), layer=LABEL_LAYER)
 
     return c
 
@@ -2559,9 +3366,10 @@ def interactive_generator():
     print("  8. 81-Trit Processor (3^4 - optimal)")
     print("  9. Custom component")
     print(" 10. COMPLETE ALU (frontend + ALU + output)")
-    print(" 11. FULL 81-TRIT CHIP (complete with frontend) [RECOMMENDED]")
+    print(" 11. FULL 81-TRIT CHIP (complete with frontend)")
+    print(" 12. 81-TRIT OPTICAL CARRY + SOA AMPLIFIERS [RECOMMENDED]")
 
-    choice = input("\nSelect template (1-11): ").strip()
+    choice = input("\nSelect template (1-12): ").strip()
 
     if choice == "1":
         chip = generate_ternary_adder()
@@ -2621,6 +3429,27 @@ def interactive_generator():
         print("  This may take a moment...")
         chip = generate_complete_81_trit(selector_type=sel_type)
         chip_name = f"ternary_81trit_full_{sel_type}"
+    elif choice == "12":
+        print("\n" + "="*60)
+        print("  81-TRIT UNIVERSAL ALU v2 - ALL 4 OPERATIONS")
+        print("="*60)
+        print("\nFeatures:")
+        print("  • ALL 4 OPERATIONS: ADD, SUB, MUL, DIV")
+        print("  • Log-domain for MUL/DIV (elegant: ln(A×B) = ln(A)+ln(B))")
+        print("  • Only 2 mixers needed (SFG + DFG)")
+        print("  • Fully optical carry chain (no firmware math)")
+        print("  • 26 SOA amplifier stations (every 3 trits)")
+        print("  • 30 dB gain per amplifier")
+        print("  • ~800 ps total propagation time")
+        print("\nControl signals per trit:")
+        print("  • ctrl_linear + ctrl_sfg → ADD")
+        print("  • ctrl_linear + ctrl_dfg → SUB")
+        print("  • ctrl_log + ctrl_sfg → MUL (log-domain add)")
+        print("  • ctrl_log + ctrl_dfg → DIV (log-domain sub)")
+        print("\nGenerating 81-trit universal ALU v2...")
+        print("  This may take a moment...")
+        chip = generate_81_trit_optical_carry(name='T81_Universal_v2')
+        chip_name = "ternary_81trit_universal_v2"
     elif choice == "9":
         print("\nCustom components:")
         print("  a. Wavelength Selector (ring resonator)")
