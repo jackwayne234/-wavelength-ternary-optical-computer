@@ -330,10 +330,76 @@ klayout Research/data/gds/backplane_central_clock.gds
 
 ## Next Steps
 
-1. **Generate full 81×81 GDS files** - run the generators
-2. **Complete Kerr χ³ sweep** - validate 617 MHz clock
+1. ~~**Generate full 81×81 GDS files**~~ ✓ DONE
+2. **Complete Kerr χ³ sweep** - IN PROGRESS (χ³=0 baseline done, running χ³=0.0001)
 3. **Test Super IOC + Array integration**
 4. **Benchmark against GPU/TPU for specific AI workloads**
+
+---
+
+## Modular Architecture Update
+
+### Chip Generator Menu Updated
+
+The `ternary_chip_generator.py` menu now reflects the new AI-focused architecture:
+
+| Option | Description |
+|--------|-------------|
+| 10 | AI ACCELERATOR (81×81 Systolic + Super IOC) |
+| 11 | COMPLETE AI SYSTEM (Array + Super IOC + Central Clock Backplane) |
+
+**Key Change**: RAM has been removed from the architecture. The Super IOC provides:
+- Weight loading (6,561 weights in ~96μs)
+- Activation streaming (81-channel double-buffered)
+- Result collection (81-channel with accumulation)
+
+Weights are stored IN the PE array (bistable Kerr resonators), not external RAM.
+
+### Modular Design Benefits
+
+Users can swap components for different use cases:
+- **Standard AI**: Full 81×81 array + Super IOC
+- **Edge deployment**: 9×9 or 27×27 array + minimal IOC
+- **Research**: Single PE for component testing
+- **Custom**: Mix and match as needed
+
+---
+
+## Kerr χ³ Sweep Status
+
+**Running in background** (task b49c4bd)
+
+### Completed: χ³ = 0 (baseline)
+```
+Resonances found: 61
+Nearest resonance: 1.7199 μm
+Q factor: 16
+FSR: 6.10 nm
+Finesse: 0.1
+Kerr shift coefficient: 0.00e+00 μm/W
+```
+
+### In Progress: χ³ = 0.0001
+- Simulation running, field decay measuring
+- Looking for bistability threshold for 617 MHz self-pulsing
+
+### Remaining: χ³ = 0.001, 0.01, 0.1
+- Will sweep to find optimal Kerr coefficient
+
+---
+
+## GDS Files Generated This Session
+
+| File | Size | Description |
+|------|------|-------------|
+| optical_systolic_81x81.gds | 16 MB | Full 6,561 PE array (4.5mm × 4.5mm) |
+| optical_systolic_27x27.gds | 1.5 MB | Medium array (729 PEs) |
+| optical_systolic_9x9.gds | 170 KB | Small array (81 PEs) |
+| optical_systolic_pe.gds | 12 KB | Single PE for inspection |
+| super_ioc_module.gds | 95 KB | Super IOC (2.4mm × 1.8mm) |
+| weight_loader_unit.gds | - | Weight loading component |
+| activation_streamer_unit.gds | - | Activation streaming component |
+| result_collector_unit.gds | - | Result collection component |
 
 ---
 
@@ -348,10 +414,20 @@ cd /home/jackwayne/Desktop/Optical_computing
 # Generate Super IOC module
 .mamba_env/bin/python3 Research/programs/super_ioc_module.py
 
+# Check Kerr simulation status
+tail -50 /tmp/claude-1000/-home-jackwayne-Desktop/tasks/b49c4bd.output
+
 # View in KLayout
 klayout Research/data/gds/optical_systolic_81x81.gds
 klayout Research/data/gds/super_ioc_module.gds
 ```
+
+---
+
+## Git Commits This Session
+
+- `30fca58` - Add 81×81 optical systolic array and Super IOC for AI acceleration
+- `6e4d398` - Update chip generator: replace RAM with modular AI accelerator architecture
 
 ---
 
