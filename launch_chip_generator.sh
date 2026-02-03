@@ -1,0 +1,1 @@
+/home/jackwayne/Desktop/Optical_computing/bin/launch_chip_generator.sh

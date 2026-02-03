@@ -12,6 +12,53 @@ from gdsfactory.routing import route_single
 import numpy as np
 from typing import List, Dict, Optional, Literal
 
+# Import IOC module for electronic-optical interface
+from ioc_module import (
+    ioc_module_complete,
+    ioc_encoder_unit,
+    ioc_decoder_unit,
+    tier1_adapter,
+    tier2_adapter,
+    tier3_adapter
+)
+
+# Import Optical Backplane for system interconnect
+from optical_backplane import (
+    optical_backplane,
+    mini_backplane,
+    backplane_slot,
+    crossbar_switch,
+    optical_bus,
+    backplane_edfa,
+    kerr_clock_hub,
+    backplane_central_clock
+)
+
+# Import IOA module for external adapters
+from ioa_module import (
+    ioa_system_complete,
+    electronic_ioa,
+    network_ioa,
+    sensor_ioa,
+    ioa_controller
+)
+
+# Import Storage IOA for memory interfaces
+from storage_ioa import (
+    storage_ioa,
+    nvme_controller,
+    ddr5_phy,
+    hbm_phy
+)
+
+# Import OPU Controller (the brain)
+from opu_controller import (
+    opu_controller,
+    command_queue,
+    ternary_instruction_decoder,
+    ternary_branch_predictor
+)
+
 # Activate the generic PDK
 gf.gpdk.PDK.activate()
 
@@ -3355,169 +3402,212 @@ def interactive_generator():
     print("  Wavelength-Division Ternary Computer")
     print("="*60)
 
-    print("\nAvailable chip templates:")
-    print("  1. Ternary Adder (A + B)")
-    print("  2. Ternary Subtractor (A - B)")
-    print("  3. Ternary Multiplier (A × B)")
-    print("  4. Ternary Divider (A ÷ B)")
-    print("  5. Single ALU (configurable)")
-    print("  6. Full N-trit Processor")
-    print("  7. Power-of-3 Processor (3^N trits)")
-    print("  8. 81-Trit Processor (3^4 - optimal)")
-    print("  9. Custom component")
-    print(" 10. COMPLETE ALU (frontend + ALU + output)")
-    print(" 11. FULL 81-TRIT CHIP (complete with frontend)")
-    print(" 12. 81-TRIT OPTICAL CARRY + SOA AMPLIFIERS [RECOMMENDED]")
+    print("\n=== MODULES ===")
+    print("  1. IOC Module (Input/Output Converter)")
+    print("  2. IOA - Electronic Adapter (PCIe/USB/GPIO)")
+    print("  3. IOA - Network Adapter (Ethernet/RDMA)")
+    print("  4. IOA - Sensor Adapter (Multi-ch ADC)")
+    print("  5. IOA - Complete System (All Adapters)")
+    print("  6. Storage IOA (NVMe + DDR5 + HBM)")
+    print("  7. OPU Controller (The Brain)")
+    print("  8. Optical Backplane (Interconnect + Amplifiers)")
+    print("\n=== COMPLETE SYSTEMS ===")
+    print("  9. 81-Trit Universal ALU (ADD/SUB/MUL/DIV)")
+    print(" 10. Integrated System (ALU + IOC + RAM)")
+    print(" 11. AUTONOMOUS OPTICAL COMPUTER [COMPLETE]")
 
-    choice = input("\nSelect template (1-12): ").strip()
+    choice = input("\nSelect template (1-11): ").strip()
 
+    # === MODULES ===
     if choice == "1":
-        chip = generate_ternary_adder()
-        chip_name = "ternary_adder"
-    elif choice == "2":
-        chip = generate_ternary_subtractor()
-        chip_name = "ternary_subtractor"
-    elif choice == "3":
-        chip = generate_ternary_multiplier()
-        chip_name = "ternary_multiplier"
-    elif choice == "4":
-        chip = generate_ternary_divider()
-        chip_name = "ternary_divider"
-    elif choice == "5":
-        ops = input("Operations (comma-separated, e.g., add,subtract,multiply,divide): ").strip().split(",")
-        chip = generate_ternary_alu(operations=[o.strip() for o in ops])
-        chip_name = "ternary_alu"
-    elif choice == "6":
-        n = int(input("Number of trits (e.g., 3): ").strip())
-        chip = generate_full_processor(n_trits=n)
-        chip_name = f"ternary_processor_{n}trit"
-    elif choice == "7":
-        print("\nPower-of-3 options:")
-        print("  1: 3^1 =   3 trits (tryte)")
-        print("  2: 3^2 =   9 trits (nonad)")
-        print("  3: 3^3 =  27 trits (heptacosa)")
-        print("  4: 3^4 =  81 trits (optimal) [RECOMMENDED]")
-        print("  5: 3^5 = 243 trits (vector)")
-        p = int(input("Enter power (1-5): ").strip())
-        print(f"Generating 3^{p} = {3**p} trit processor...")
-        chip = generate_power_of_3_processor(power=p)
-        chip_name = f"ternary_3pow{p}_{3**p}trit"
-    elif choice == "8":
-        print("Generating 81-trit (3^4) optimal processor...")
-        print("This is the recommended architecture for ternary computing.")
-        print("128-bit equivalent | 4.4 × 10^38 values")
-        chip = generate_81_trit_processor()
-        chip_name = "ternary_81trit_optimal"
-    elif choice == "10":
-        print("Generating COMPLETE ALU with optical frontend...")
-        print("  Laser → Kerr Clock → Y-Split → AWGs → Selectors → Mixer → 3-channel Output")
-        print("\nSelector type:")
-        print("  1. Ring resonator (default, compact)")
-        print("  2. MZI switch (better extinction, fab-tolerant)")
-        sel_choice = input("Select (1/2): ").strip()
-        sel_type = 'mzi' if sel_choice == "2" else 'ring'
-        chip = generate_complete_alu(selector_type=sel_type)
-        chip_name = f"ternary_complete_alu_{sel_type}"
-    elif choice == "11":
-        print("Generating FULL 81-TRIT CHIP...")
-        print("  Master clock + 9×9 grid of complete ALUs")
-        print("\nSelector type:")
-        print("  1. Ring resonator (default, compact)")
-        print("  2. MZI switch (better extinction, fab-tolerant)")
-        sel_choice = input("Select (1/2): ").strip()
-        sel_type = 'mzi' if sel_choice == "2" else 'ring'
-        print("  This may take a moment...")
-        chip = generate_complete_81_trit(selector_type=sel_type)
-        chip_name = f"ternary_81trit_full_{sel_type}"
-    elif choice == "12":
         print("\n" + "="*60)
-        print("  81-TRIT UNIVERSAL ALU v2 - ALL 4 OPERATIONS")
+        print("  IOC MODULE - Input/Output Converter")
+        print("="*60)
+        print("\nThe IOC module bridges electronic and optical domains:")
+        print("  • ENCODE: Electronic ternary -> RGB wavelength optical")
+        print("  • DECODE: 5-level photodetector -> electronic ternary + carry")
+        print("  • BUFFER/SYNC: Timing between optical ALU and electronic control")
+        print("  • RAM ADAPTERS: Tier 1/2/3 memory interfaces")
+        print("\nInclude laser sources? (y/n): ", end="")
+        include_lasers = input().strip().lower() == "y"
+        print("Generating IOC module...")
+        chip = ioc_module_complete(include_laser_sources=include_lasers)
+        chip_name = "ioc_module" if include_lasers else "ioc_module_no_lasers"
+    elif choice == "2":
+        print("\n" + "="*60)
+        print("  IOA - Electronic Adapter")
+        print("="*60)
+        print("\nHost computer interface with:")
+        print("  • PCIe Gen4 for high-bandwidth data transfer")
+        print("  • USB 3.2 for universal connectivity")
+        print("  • GPIO for control/debug")
+        print("  • DMA controller for autonomous transfers")
+        lanes = input("\nPCIe lanes (1/4/8/16) [4]: ").strip() or "4"
+        chip = electronic_ioa(pcie_lanes=int(lanes))
+        chip_name = f"electronic_ioa_pcie_x{lanes}"
+    elif choice == "3":
+        print("\n" + "="*60)
+        print("  IOA - Network Adapter")
+        print("="*60)
+        print("\nDistributed computing interface with:")
+        print("  • Dual Ethernet ports (configurable speed)")
+        print("  • RDMA for zero-copy transfers")
+        print("  • TCP/IP offload engine")
+        print("  • Hardware packet filtering")
+        print("\nSpeed options: 1G, 10G, 25G, 100G")
+        speed = input("Ethernet speed [25G]: ").strip() or "25G"
+        ports = input("Number of ports (1-4) [2]: ").strip() or "2"
+        chip = network_ioa(speed=speed, ports=int(ports))
+        chip_name = f"network_ioa_{speed}_x{ports}"
+    elif choice == "4":
+        print("\n" + "="*60)
+        print("  IOA - Sensor Adapter")
+        print("="*60)
+        print("\nEdge computing interface with:")
+        print("  • Multi-channel ADC inputs")
+        print("  • Signal conditioning (gain, offset)")
+        print("  • Anti-aliasing filters")
+        print("  • Direct ternary quantization option")
+        channels = input("\nNumber of channels (1-16) [8]: ").strip() or "8"
+        chip = sensor_ioa(channels=int(channels))
+        chip_name = f"sensor_ioa_{channels}ch"
+    elif choice == "5":
+        print("\n" + "="*60)
+        print("  IOA - Complete System")
+        print("="*60)
+        print("\nAll adapters in one package:")
+        print("  • Electronic (PCIe x4, USB, GPIO)")
+        print("  • Network (25G Ethernet x2)")
+        print("  • Sensor (8-ch ADC)")
+        print("  • Unified controller")
+        chip = ioa_system_complete()
+        chip_name = "ioa_system_complete"
+    elif choice == "6":
+        print("\n" + "="*60)
+        print("  Storage IOA")
+        print("="*60)
+        print("\nHigh-performance storage interfaces:")
+        print("  • NVMe controller (4 lanes)")
+        print("  • DDR5 PHY (dual channel)")
+        print("  • HBM PHY (8 stacks)")
+        print("  • Unified memory controller")
+        chip = storage_ioa()
+        chip_name = "storage_ioa"
+    elif choice == "7":
+        print("\n" + "="*60)
+        print("  OPU Controller - The Brain")
+        print("="*60)
+        print("\nOptical Processing Unit controller with:")
+        print("  • Command queue (256 entries)")
+        print("  • Ternary instruction decoder")
+        print("  • Branch predictor (ternary-optimized)")
+        print("  • Memory controller interface")
+        chip = opu_controller()
+        chip_name = "opu_controller"
+    elif choice == "8":
+        print("\n" + "="*60)
+        print("  OPTICAL BACKPLANE")
+        print("  Interconnect + Signal Amplification")
+        print("="*60)
+        print("\nDual-purpose backplane providing:")
+        print("  • WDM optical bus (8-ch, 100 Gbps/ch)")
+        print("  • Non-blocking crossbar switch")
+        print("  • EDFA amplifiers (+20dB) for signal regeneration")
+        print("  • Tap points for add/drop at each slot")
+        print("\nBackplane configuration:")
+        print("  1. Linear (4 OPU + 2 IOC + 4 IOA + Storage + RAM)")
+        print("  2. Central Clock (modules around Kerr clock) [RECOMMENDED]")
+        print("  3. Mini (4 slots, compact)")
+        bp_choice = input("Select (1/2/3) [2]: ").strip() or "2"
+        if bp_choice == "1":
+            opu = input("OPU slots [4]: ").strip() or "4"
+            ioc = input("IOC slots [2]: ").strip() or "2"
+            ioa = input("IOA slots [4]: ").strip() or "4"
+            chip = optical_backplane(n_opu_slots=int(opu), n_ioc_slots=int(ioc), n_ioa_slots=int(ioa))
+            chip_name = f"optical_backplane_{opu}opu_{ioc}ioc_{ioa}ioa"
+        elif bp_choice == "3":
+            slots = input("Number of slots [4]: ").strip() or "4"
+            chip = mini_backplane(n_slots=int(slots))
+            chip_name = f"mini_backplane_{slots}slot"
+        else:
+            print("\nCentral Clock Architecture:")
+            print("  • Kerr resonator at center (617 MHz)")
+            print("  • Modules arranged radially for minimal skew")
+            print("  • EDFA on each arm for signal boost")
+            print("  • Data bus ring connects all modules")
+            opu = input("OPU slots [4]: ").strip() or "4"
+            ioc = input("IOC slots [2]: ").strip() or "2"
+            ioa = input("IOA slots [2]: ").strip() or "2"
+            chip = backplane_central_clock(n_opu_slots=int(opu), n_ioc_slots=int(ioc), n_ioa_slots=int(ioa))
+            chip_name = f"backplane_central_clock_{opu}opu_{ioc}ioc_{ioa}ioa"
+
+    # === COMPLETE SYSTEMS ===
+    elif choice == "9":
+        print("\n" + "="*60)
+        print("  81-TRIT UNIVERSAL ALU - ALL 4 OPERATIONS")
         print("="*60)
         print("\nFeatures:")
         print("  • ALL 4 OPERATIONS: ADD, SUB, MUL, DIV")
         print("  • Log-domain for MUL/DIV (elegant: ln(A×B) = ln(A)+ln(B))")
-        print("  • Only 2 mixers needed (SFG + DFG)")
         print("  • Fully optical carry chain (no firmware math)")
         print("  • 26 SOA amplifier stations (every 3 trits)")
         print("  • 30 dB gain per amplifier")
         print("  • ~800 ps total propagation time")
-        print("\nControl signals per trit:")
-        print("  • ctrl_linear + ctrl_sfg → ADD")
-        print("  • ctrl_linear + ctrl_dfg → SUB")
-        print("  • ctrl_log + ctrl_sfg → MUL (log-domain add)")
-        print("  • ctrl_log + ctrl_dfg → DIV (log-domain sub)")
-        print("\nGenerating 81-trit universal ALU v2...")
-        print("  This may take a moment...")
-        chip = generate_81_trit_optical_carry(name='T81_Universal_v2')
-        chip_name = "ternary_81trit_universal_v2"
-    elif choice == "9":
-        print("\nCustom components:")
-        print("  a. Wavelength Selector (ring resonator)")
-        print("  b. SFG Mixer (addition/multiply)")
-        print("  c. DFG Divider (subtraction/divide)")
-        print("  d. Wavelength Inverter (negation)")
-        print("  e. Combiner")
-        print("  f. Splitter")
-        print("  g. Photodetector")
-        print("  h. Kerr Resonator (optical clock)")
-        print("  i. Y-Junction (beam splitter)")
-        print("  j. AWG Demux (wavelength separator)")
-        print("  k. Optical Frontend (complete input stage)")
-        print("  l. MZI Switch (Mach-Zehnder interferometer)")
-        print("  m. MZI Wavelength Selector (MZI-based gating)")
-        sub = input("Select (a-m): ").strip().lower()
-
-        if sub == "a":
-            wvl = float(input("Wavelength (μm, e.g., 1.55): "))
-            chip = wavelength_selector(wavelength_um=wvl)
-            chip_name = f"selector_{wvl}um"
-        elif sub == "b":
-            chip = sfg_mixer()
-            chip_name = "sfg_mixer"
-        elif sub == "c":
-            chip = dfg_divider()
-            chip_name = "dfg_divider"
-        elif sub == "d":
-            chip = wavelength_inverter()
-            chip_name = "wavelength_inverter"
-        elif sub == "e":
-            chip = wavelength_combiner()
-            chip_name = "combiner"
-        elif sub == "f":
-            chip = wavelength_splitter()
-            chip_name = "splitter"
-        elif sub == "g":
-            chip = photodetector()
-            chip_name = "photodetector"
-        elif sub == "h":
-            chip = kerr_resonator()
-            chip_name = "kerr_clock"
-        elif sub == "i":
-            chip = y_junction()
-            chip_name = "y_junction"
-        elif sub == "j":
-            chip = awg_demux()
-            chip_name = "awg_demux"
-        elif sub == "k":
-            print("Generating complete optical frontend...")
-            print("  Kerr resonator (clock) -> Y-junction -> 2x AWG demux")
-            chip = optical_frontend()
-            chip_name = "optical_frontend"
-        elif sub == "l":
-            print("Generating MZI Switch...")
-            print("  Two 3dB couplers + phase shifter arms")
-            print("  Better extinction ratio than ring resonators")
-            chip = mzi_switch()
-            chip_name = "mzi_switch"
-        elif sub == "m":
-            wvl = float(input("Wavelength (μm, e.g., 1.55): "))
-            print("Generating MZI Wavelength Selector...")
-            print("  MZI switch with wavelength label")
-            chip = wavelength_selector_mzi(wavelength_um=wvl)
-            chip_name = f"mzi_selector_{wvl}um"
-        else:
-            print("Invalid selection")
-            return
+        print("\nGenerating 81-trit universal ALU...")
+        chip = generate_81_trit_optical_carry(name='T81_Universal_ALU')
+        chip_name = "ternary_81trit_universal_alu"
+    elif choice == "10":
+        print("\n" + "="*60)
+        print("  INTEGRATED SYSTEM - ALU + IOC + RAM")
+        print("="*60)
+        print("\nGenerating complete integrated system...")
+        c = gf.Component("integrated_system")
+        alu = c << generate_81_trit_optical_carry(name='T81_ALU')
+        alu.dmove((0, 0))
+        ioc = c << ioc_module_complete(include_laser_sources=True)
+        ioc.dmove((-1000, 0))
+        c.add_label("INTEGRATED TERNARY OPTICAL SYSTEM", position=(0, 1500), layer=LABEL_LAYER)
+        c.add_label("81-Trit ALU + IOC + RAM Adapters", position=(0, 1450), layer=LABEL_LAYER)
+        chip = c
+        chip_name = "integrated_system"
+    elif choice == "11":
+        print("\n" + "="*60)
+        print("  AUTONOMOUS OPTICAL COMPUTER")
+        print("  Complete Integrated System")
+        print("="*60)
+        print("\nGenerating complete autonomous system with:")
+        print("  • 81-Trit Optical ALU")
+        print("  • OPU Controller (the brain)")
+        print("  • IOC (electronic-optical conversion)")
+        print("  • IOA System (Electronic, Network, Sensor)")
+        print("  • Storage IOA (NVMe, DDR5, HBM)")
+        print("  • Optical Backplane (interconnect + amplifiers)")
+        print("\nThis may take a moment...")
+        c = gf.Component("autonomous_optical_computer")
+        # Generate all components
+        alu = generate_81_trit_optical_carry(name='T81_ALU')
+        opu = opu_controller()
+        ioc = ioc_module_complete(include_laser_sources=True, include_ioa_bus=True)
+        ioa = ioa_system_complete()
+        stor = storage_ioa()
+        bp = optical_backplane(n_opu_slots=1, n_ioc_slots=1, n_ioa_slots=2)
+        # Layout hierarchically
+        bp_inst = c << bp
+        bp_inst.dmove((0, 3200))
+        ioa_inst = c << ioa
+        ioa_inst.dmove((0, 2800))
+        stor_inst = c << stor
+        stor_inst.dmove((1400, 2800))
+        opu_inst = c << opu
+        opu_inst.dmove((400, 2100))
+        ioc_inst = c << ioc
+        ioc_inst.dmove((300, 1400))
+        alu_inst = c << alu
+        alu_inst.dmove((0, 0))
+        c.add_label("AUTONOMOUS TERNARY OPTICAL COMPUTER", position=(700, 4600), layer=LABEL_LAYER)
+        c.add_label("ALU + OPU + IOC + IOA + Storage + Backplane", position=(700, 4550), layer=LABEL_LAYER)
+        chip = c
+        chip_name = "autonomous_optical_computer"
     else:
         print("Invalid selection")
         return
