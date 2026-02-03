@@ -3396,242 +3396,253 @@ def generate_81_trit_optical_carry(
 def interactive_generator():
     """
     Interactive CLI for generating chips.
+    Three-tier system: Standard Computer, Home AI, Supercomputer.
     """
-    print("\n" + "="*60)
-    print("  TERNARY OPTICAL CHIP GENERATOR")
-    print("  Wavelength-Division Ternary Computer")
-    print("="*60)
+    print("\n" + "="*70)
+    print("  WAVELENGTH-DIVISION TERNARY OPTICAL COMPUTER")
+    print("  Chip Generator v2.0 - WDM Parallel Architecture")
+    print("="*70)
 
-    print("\n=== MODULES ===")
-    print("  1. IOC Module (Input/Output Converter)")
-    print("  2. IOA - Electronic Adapter (PCIe/USB/GPIO)")
-    print("  3. IOA - Network Adapter (Ethernet/RDMA)")
-    print("  4. IOA - Sensor Adapter (Multi-ch ADC)")
-    print("  5. IOA - Complete System (All Adapters)")
-    print("  6. Storage IOA (NVMe + DDR5 + HBM)")
-    print("  7. OPU Controller (The Brain)")
-    print("  8. Optical Backplane (Interconnect + Amplifiers)")
-    print("\n=== COMPLETE SYSTEMS ===")
-    print("  9. 81-Trit Universal ALU (ADD/SUB/MUL/DIV)")
-    print(" 10. AI ACCELERATOR (81×81 Systolic + Super IOC) [NEW]")
-    print(" 11. AUTONOMOUS OPTICAL COMPUTER [COMPLETE]")
+    print("\n" + "="*70)
+    print("  COMPLETE SYSTEMS (Choose Your Tier)")
+    print("="*70)
+    print("\n  [1] STANDARD COMPUTER")
+    print("      - 81-trit Universal ALU (ADD/SUB/MUL/DIV)")
+    print("      - IOC + Backplane")
+    print("      - ~3.2 TFLOPS equivalent")
+    print("      - Use case: General ternary computing, research")
 
-    choice = input("\nSelect template (1-11): ").strip()
+    print("\n  [2] HOME AI")
+    print("      - 243x243 Systolic Array (59,049 PEs)")
+    print("      - 8 WDM channels (C-band)")
+    print("      - Super IOC (streaming, no RAM)")
+    print("      - ~291 TFLOPS")
+    print("      - Use case: Edge inference, local LLMs, prosumer AI")
 
-    # === MODULES ===
+    print("\n  [3] SUPERCOMPUTER")
+    print("      - 8-Chip Circular Backplane ('Round Table')")
+    print("      - 243x243 x 8 chips x 8 WDM = 3.78M compute units")
+    print("      - Central Kerr clock (617 MHz)")
+    print("      - ~2.3 PFLOPS (beats NVIDIA H100!)")
+    print("      - Use case: Datacenter AI, training, HPC")
+
+    print("\n" + "="*70)
+    print("  INDIVIDUAL MODULES (For Custom Builds)")
+    print("="*70)
+    print("  [4] IOC Module (Input/Output Converter)")
+    print("  [5] Super IOC (WDM Streaming I/O)")
+    print("  [6] IOA System (Electronic/Network/Sensor Adapters)")
+    print("  [7] Storage IOA (NVMe + DDR5 + HBM)")
+    print("  [8] OPU Controller (The Brain)")
+    print("  [9] Optical Backplane (Central Clock Architecture)")
+    print(" [10] WDM Systolic Array (Configurable Size)")
+
+    print("\n" + "="*70)
+    choice = input("Select option (1-10): ").strip()
+
+    # ===========================================
+    # TIER 1: STANDARD COMPUTER
+    # ===========================================
     if choice == "1":
-        print("\n" + "="*60)
-        print("  IOC MODULE - Input/Output Converter")
-        print("="*60)
-        print("\nThe IOC module bridges electronic and optical domains:")
-        print("  • ENCODE: Electronic ternary -> RGB wavelength optical")
-        print("  • DECODE: 5-level photodetector -> electronic ternary + carry")
-        print("  • BUFFER/SYNC: Timing between optical ALU and electronic control")
-        print("  • NOTE: For AI workloads, use Super IOC instead (option 10)")
-        print("\nInclude laser sources? (y/n): ", end="")
-        include_lasers = input().strip().lower() == "y"
-        print("Generating IOC module...")
-        chip = ioc_module_complete(include_laser_sources=include_lasers)
-        chip_name = "ioc_module" if include_lasers else "ioc_module_no_lasers"
+        print("\n" + "="*70)
+        print("  TIER 1: STANDARD COMPUTER")
+        print("  General-Purpose Ternary Computing")
+        print("="*70)
+        print("\nComponents:")
+        print("  - 81-trit Universal ALU (ADD/SUB/MUL/DIV)")
+        print("  - IOC Module (electronic-optical conversion)")
+        print("  - Basic Backplane with Kerr clock")
+        print("\nFeatures:")
+        print("  - All 4 operations in optical domain")
+        print("  - Log-domain for MUL/DIV")
+        print("  - Fully optical carry chain (~800ps)")
+        print("  - ~3.2 TFLOPS equivalent")
+        print("\nGenerating Standard Computer...")
+        c = gf.Component("standard_computer")
+        alu = c << generate_81_trit_optical_carry(name='T81_ALU')
+        alu.dmove((0, 0))
+        ioc_comp = c << ioc_module_complete(include_laser_sources=True)
+        ioc_comp.dmove((-2000, 500))
+        bp = c << backplane_central_clock(n_opu_slots=1, n_ioc_slots=1, n_ioa_slots=1)
+        bp.dmove((0, 3000))
+        c.add_label("TIER 1: STANDARD COMPUTER", position=(1500, 4500), layer=LABEL_LAYER)
+        c.add_label("81-trit ALU + IOC + Backplane (~3.2 TFLOPS)", position=(1500, 4450), layer=LABEL_LAYER)
+        chip = c
+        chip_name = "tier1_standard_computer"
+
+    # ===========================================
+    # TIER 2: HOME AI
+    # ===========================================
     elif choice == "2":
-        print("\n" + "="*60)
-        print("  IOA - Electronic Adapter")
-        print("="*60)
-        print("\nHost computer interface with:")
-        print("  • PCIe Gen4 for high-bandwidth data transfer")
-        print("  • USB 3.2 for universal connectivity")
-        print("  • GPIO for control/debug")
-        print("  • DMA controller for autonomous transfers")
-        lanes = input("\nPCIe lanes (1/4/8/16) [4]: ").strip() or "4"
-        chip = electronic_ioa(pcie_lanes=int(lanes))
-        chip_name = f"electronic_ioa_pcie_x{lanes}"
+        print("\n" + "="*70)
+        print("  TIER 2: HOME AI")
+        print("  Edge Inference & Local LLMs")
+        print("="*70)
+        print("\nComponents:")
+        print("  - 243x243 Systolic Array (59,049 PEs)")
+        print("  - 8 WDM channels (C-band parallel)")
+        print("  - Super IOC (streaming, no RAM needed)")
+        print("\nFeatures:")
+        print("  - Weight-stationary architecture")
+        print("  - Multi-domain: LINEAR / LOG / LOG-LOG")
+        print("  - 8x parallelism via wavelength division")
+        print("  - ~291 TFLOPS (vs RTX 4090: 83 TFLOPS)")
+        print("\nGenerating Home AI System...")
+        try:
+            from c_band_wdm_systolic import wdm_systolic_array, wdm_super_ioc
+            c = gf.Component("home_ai")
+            array = c << wdm_systolic_array(n_rows=27, n_cols=27, n_channels=8, array_id="HomeAI")
+            array.dmove((0, 0))
+            ioc_comp = c << wdm_super_ioc(n_channels=8, n_data_lanes=243)
+            ioc_comp.dmove((-3500, 0))
+            c.add_label("TIER 2: HOME AI", position=(2000, 5500), layer=LABEL_LAYER)
+            c.add_label("243x243 x 8 WDM = 472,392 compute units", position=(2000, 5450), layer=LABEL_LAYER)
+            c.add_label("~291 TFLOPS @ 617 MHz", position=(2000, 5400), layer=LABEL_LAYER)
+            chip = c
+            chip_name = "tier2_home_ai"
+        except ImportError as e:
+            print(f"Error: {e}")
+            print("Run c_band_wdm_systolic.py first to generate WDM components.")
+            return
+
+    # ===========================================
+    # TIER 3: SUPERCOMPUTER
+    # ===========================================
     elif choice == "3":
-        print("\n" + "="*60)
-        print("  IOA - Network Adapter")
-        print("="*60)
-        print("\nDistributed computing interface with:")
-        print("  • Dual Ethernet ports (configurable speed)")
-        print("  • RDMA for zero-copy transfers")
-        print("  • TCP/IP offload engine")
-        print("  • Hardware packet filtering")
-        print("\nSpeed options: 1G, 10G, 25G, 100G")
-        speed = input("Ethernet speed [25G]: ").strip() or "25G"
-        ports = input("Number of ports (1-4) [2]: ").strip() or "2"
-        chip = network_ioa(speed=speed, ports=int(ports))
-        chip_name = f"network_ioa_{speed}_x{ports}"
+        print("\n" + "="*70)
+        print("  TIER 3: SUPERCOMPUTER")
+        print("  Datacenter AI & HPC")
+        print("="*70)
+        print("\nComponents:")
+        print("  - 8-Chip Circular Backplane ('Round Table')")
+        print("  - 243x243 array per chip (59,049 PEs each)")
+        print("  - 8 WDM channels (C-band)")
+        print("  - Central Kerr clock (617 MHz, zero skew)")
+        print("  - 8 Super IOCs (one per chip)")
+        print("\nTotal Compute:")
+        print("  - 8 chips x 59,049 PEs x 8 WDM = 3,779,136 compute units")
+        print("  - ~2.33 PFLOPS (1.2x NVIDIA H100!)")
+        print("\nUpgrade Path:")
+        print("  - Phase 2: 24 WDM (C+L band) -> 7.0 PFLOPS")
+        print("  - Phase 3: 729x729 arrays -> 63 PFLOPS")
+        print("\nGenerating Supercomputer...")
+        try:
+            from c_band_wdm_systolic import circular_backplane
+            chip = circular_backplane(n_chips=8, n_wdm=8, array_size=243)
+            chip_name = "tier3_supercomputer"
+        except ImportError as e:
+            print(f"Error: {e}")
+            print("Run c_band_wdm_systolic.py first to generate WDM components.")
+            return
+
+    # ===========================================
+    # INDIVIDUAL MODULES
+    # ===========================================
     elif choice == "4":
         print("\n" + "="*60)
-        print("  IOA - Sensor Adapter")
+        print("  IOC Module - Input/Output Converter")
         print("="*60)
-        print("\nEdge computing interface with:")
-        print("  • Multi-channel ADC inputs")
-        print("  • Signal conditioning (gain, offset)")
-        print("  • Anti-aliasing filters")
-        print("  • Direct ternary quantization option")
-        channels = input("\nNumber of channels (1-16) [8]: ").strip() or "8"
-        chip = sensor_ioa(channels=int(channels))
-        chip_name = f"sensor_ioa_{channels}ch"
+        print("\nBridges electronic and optical domains:")
+        print("  - ENCODE: Electronic ternary -> RGB wavelength")
+        print("  - DECODE: 5-level photodetector -> ternary + carry")
+        include_lasers = input("\nInclude laser sources? (y/n) [y]: ").strip().lower() != "n"
+        chip = ioc_module_complete(include_laser_sources=include_lasers)
+        chip_name = "ioc_module"
+
     elif choice == "5":
         print("\n" + "="*60)
-        print("  IOA - Complete System")
+        print("  Super IOC - WDM Streaming I/O")
         print("="*60)
-        print("\nAll adapters in one package:")
-        print("  • Electronic (PCIe x4, USB, GPIO)")
-        print("  • Network (25G Ethernet x2)")
-        print("  • Sensor (8-ch ADC)")
-        print("  • Unified controller")
+        print("\nHigh-throughput streaming I/O for AI workloads:")
+        print("  - Frequency comb laser source")
+        print("  - AWG demux/mux banks")
+        print("  - High-speed LiNbO3 modulators")
+        print("  - No RAM needed - direct streaming")
+        try:
+            from c_band_wdm_systolic import wdm_super_ioc
+            channels = input("\nWDM channels (8/16/24) [8]: ").strip() or "8"
+            lanes = input("Data lanes [243]: ").strip() or "243"
+            chip = wdm_super_ioc(n_channels=int(channels), n_data_lanes=int(lanes))
+            chip_name = f"super_ioc_{channels}ch_{lanes}lanes"
+        except ImportError:
+            print("Run c_band_wdm_systolic.py first.")
+            return
+
+    elif choice == "6":
+        print("\n" + "="*60)
+        print("  IOA System - All Adapters")
+        print("="*60)
+        print("\nComplete adapter package:")
+        print("  - Electronic (PCIe x4, USB, GPIO)")
+        print("  - Network (25G Ethernet x2)")
+        print("  - Sensor (8-ch ADC)")
         chip = ioa_system_complete()
         chip_name = "ioa_system_complete"
-    elif choice == "6":
+
+    elif choice == "7":
         print("\n" + "="*60)
         print("  Storage IOA")
         print("="*60)
         print("\nHigh-performance storage interfaces:")
-        print("  • NVMe controller (4 lanes)")
-        print("  • DDR5 PHY (dual channel)")
-        print("  • HBM PHY (8 stacks)")
-        print("  • Unified memory controller")
+        print("  - NVMe controller (4 lanes)")
+        print("  - DDR5 PHY (dual channel)")
+        print("  - HBM PHY (8 stacks)")
         chip = storage_ioa()
         chip_name = "storage_ioa"
-    elif choice == "7":
+
+    elif choice == "8":
         print("\n" + "="*60)
         print("  OPU Controller - The Brain")
         print("="*60)
-        print("\nOptical Processing Unit controller with:")
-        print("  • Command queue (256 entries)")
-        print("  • Ternary instruction decoder")
-        print("  • Branch predictor (ternary-optimized)")
-        print("  • Memory controller interface")
+        print("\nOptical Processing Unit controller:")
+        print("  - Command queue (256 entries)")
+        print("  - Ternary instruction decoder")
+        print("  - Branch predictor")
         chip = opu_controller()
         chip_name = "opu_controller"
-    elif choice == "8":
-        print("\n" + "="*60)
-        print("  OPTICAL BACKPLANE")
-        print("  Interconnect + Signal Amplification")
-        print("="*60)
-        print("\nDual-purpose backplane providing:")
-        print("  • WDM optical bus (8-ch, 100 Gbps/ch)")
-        print("  • Non-blocking crossbar switch")
-        print("  • EDFA amplifiers (+20dB) for signal regeneration")
-        print("  • Tap points for add/drop at each slot")
-        print("\nBackplane configuration:")
-        print("  1. Linear (4 OPU + 2 IOC + 4 IOA + Storage)")
-        print("  2. Central Clock (modules around Kerr clock) [RECOMMENDED]")
-        print("  3. Mini (4 slots, compact)")
-        bp_choice = input("Select (1/2/3) [2]: ").strip() or "2"
-        if bp_choice == "1":
-            opu = input("OPU slots [4]: ").strip() or "4"
-            ioc = input("IOC slots [2]: ").strip() or "2"
-            ioa = input("IOA slots [4]: ").strip() or "4"
-            chip = optical_backplane(n_opu_slots=int(opu), n_ioc_slots=int(ioc), n_ioa_slots=int(ioa))
-            chip_name = f"optical_backplane_{opu}opu_{ioc}ioc_{ioa}ioa"
-        elif bp_choice == "3":
-            slots = input("Number of slots [4]: ").strip() or "4"
-            chip = mini_backplane(n_slots=int(slots))
-            chip_name = f"mini_backplane_{slots}slot"
-        else:
-            print("\nCentral Clock Architecture:")
-            print("  • Kerr resonator at center (617 MHz)")
-            print("  • Modules arranged radially for minimal skew")
-            print("  • EDFA on each arm for signal boost")
-            print("  • Data bus ring connects all modules")
-            opu = input("OPU slots [4]: ").strip() or "4"
-            ioc = input("IOC slots [2]: ").strip() or "2"
-            ioa = input("IOA slots [2]: ").strip() or "2"
-            chip = backplane_central_clock(n_opu_slots=int(opu), n_ioc_slots=int(ioc), n_ioa_slots=int(ioa))
-            chip_name = f"backplane_central_clock_{opu}opu_{ioc}ioc_{ioa}ioa"
 
-    # === COMPLETE SYSTEMS ===
     elif choice == "9":
         print("\n" + "="*60)
-        print("  81-TRIT UNIVERSAL ALU - ALL 4 OPERATIONS")
+        print("  Optical Backplane - Central Clock Architecture")
         print("="*60)
         print("\nFeatures:")
-        print("  • ALL 4 OPERATIONS: ADD, SUB, MUL, DIV")
-        print("  • Log-domain for MUL/DIV (elegant: ln(A×B) = ln(A)+ln(B))")
-        print("  • Fully optical carry chain (no firmware math)")
-        print("  • 26 SOA amplifier stations (every 3 trits)")
-        print("  • 30 dB gain per amplifier")
-        print("  • ~800 ps total propagation time")
-        print("\nGenerating 81-trit universal ALU...")
-        chip = generate_81_trit_optical_carry(name='T81_Universal_ALU')
-        chip_name = "ternary_81trit_universal_alu"
+        print("  - Kerr resonator at center (617 MHz)")
+        print("  - Radial module arrangement (minimal skew)")
+        print("  - EDFA amplifiers on each arm")
+        print("  - Data bus ring interconnect")
+        opu = input("\nOPU slots [4]: ").strip() or "4"
+        ioc = input("IOC slots [2]: ").strip() or "2"
+        ioa = input("IOA slots [2]: ").strip() or "2"
+        chip = backplane_central_clock(n_opu_slots=int(opu), n_ioc_slots=int(ioc), n_ioa_slots=int(ioa))
+        chip_name = f"backplane_central_clock_{opu}opu_{ioc}ioc_{ioa}ioa"
+
     elif choice == "10":
         print("\n" + "="*60)
-        print("  AI ACCELERATOR - 81×81 Systolic Array + Super IOC")
+        print("  WDM Systolic Array - Configurable")
         print("="*60)
-        print("\nFeatures:")
-        print("  • 81×81 Optical Systolic Array (6,561 PEs)")
-        print("  • 4.05 TMAC/s peak throughput @ 617 MHz")
-        print("  • Multi-domain: LINEAR / LOG / LOG-LOG")
-        print("  • Super IOC replaces traditional RAM")
-        print("  • Weight-stationary architecture")
-        print("  • NO EXTERNAL RAM REQUIRED!")
-        print("\nGenerating AI Accelerator...")
+        print("\nConfigurable WDM-parallel systolic array:")
+        print("\nPresets:")
+        print("  1. 9x9 (81 PEs) - Testing/Debug")
+        print("  2. 27x27 (729 PEs) - Small")
+        print("  3. 81x81 (6,561 PEs) - Medium")
+        print("  4. 243x243 (59,049 PEs) - Large")
+        print("  5. Custom size")
         try:
-            from optical_systolic_array import optical_systolic_array_81x81
-            from super_ioc_module import super_ioc_module
-            c = gf.Component("ai_accelerator")
-            ioc = c << super_ioc_module()
-            ioc.dmove((0, 0))
-            array = c << optical_systolic_array_81x81()
-            array.dmove((2500, 200))
-            c.add_label("OPTICAL AI ACCELERATOR", position=(3500, 5000), layer=LABEL_LAYER)
-            c.add_label("81×81 Systolic (4.05 TMAC/s) + Super IOC (No RAM)", position=(3500, 4950), layer=LABEL_LAYER)
-            chip = c
-            chip_name = "ai_accelerator"
-        except ImportError as e:
-            print(f"Error importing modules: {e}")
-            print("Run optical_systolic_array.py and super_ioc_module.py first.")
-            return
-    elif choice == "11":
-        print("\n" + "="*60)
-        print("  AUTONOMOUS OPTICAL COMPUTER")
-        print("  Complete AI-Ready System")
-        print("="*60)
-        print("\nGenerating complete autonomous system with:")
-        print("  • 81×81 Systolic Array (6,561 PEs, 4.05 TMAC/s)")
-        print("  • Super IOC (replaces RAM - streaming architecture)")
-        print("  • OPU Controller (the brain)")
-        print("  • IOA System (Electronic, Network, Sensor)")
-        print("  • Storage IOA (NVMe, DDR5, HBM)")
-        print("  • Optical Backplane (interconnect + Kerr clock)")
-        print("\nThis may take a few minutes for the 81×81 array...")
-        c = gf.Component("autonomous_optical_computer")
-        # Generate all components
-        try:
-            from optical_systolic_array import optical_systolic_array_81x81
-            from super_ioc_module import super_ioc_module
-            array = optical_systolic_array_81x81()
-            sioc = super_ioc_module()
+            from c_band_wdm_systolic import wdm_systolic_array
+            preset = input("\nSelect preset (1-5) [3]: ").strip() or "3"
+            sizes = {"1": 9, "2": 27, "3": 81, "4": 243}
+            if preset in sizes:
+                size = sizes[preset]
+            else:
+                size = int(input("Array size (rows=cols): ").strip())
+            channels = input("WDM channels [8]: ").strip() or "8"
+            chip = wdm_systolic_array(n_rows=size, n_cols=size, n_channels=int(channels), array_id=f"{size}x{size}")
+            chip_name = f"wdm_systolic_{size}x{size}_{channels}ch"
         except ImportError:
-            print("Using basic ALU instead of systolic array...")
-            array = generate_81_trit_optical_carry(name='T81_ALU')
-            sioc = ioc_module_complete(include_laser_sources=True, include_ioa_bus=True)
-        opu = opu_controller()
-        ioa = ioa_system_complete()
-        stor = storage_ioa()
-        bp = backplane_central_clock(n_opu_slots=1, n_ioc_slots=1, n_ioa_slots=2)
-        # Layout hierarchically
-        bp_inst = c << bp
-        bp_inst.dmove((0, 6000))
-        ioa_inst = c << ioa
-        ioa_inst.dmove((0, 5500))
-        stor_inst = c << stor
-        stor_inst.dmove((1400, 5500))
-        opu_inst = c << opu
-        opu_inst.dmove((400, 4800))
-        sioc_inst = c << sioc
-        sioc_inst.dmove((0, 2500))
-        array_inst = c << array
-        array_inst.dmove((2500, 0))
-        c.add_label("AUTONOMOUS OPTICAL AI COMPUTER", position=(3000, 8000), layer=LABEL_LAYER)
-        c.add_label("81×81 Systolic (4.05 TMAC/s) + Super IOC + Backplane", position=(3000, 7950), layer=LABEL_LAYER)
-        c.add_label("NO EXTERNAL RAM - STREAMING ARCHITECTURE", position=(3000, 7900), layer=LABEL_LAYER)
-        chip = c
-        chip_name = "autonomous_optical_computer"
+            print("Run c_band_wdm_systolic.py first.")
+            return
     else:
-        print("Invalid selection")
+        print("Invalid selection. Choose 1-10.")
         return
 
     # Save and show

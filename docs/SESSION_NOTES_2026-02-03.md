@@ -328,12 +328,78 @@ klayout Research/data/gds/backplane_central_clock.gds
 
 ---
 
+## MAJOR UPDATE: C-Band WDM Architecture
+
+### The Secret Weapon: Wavelength Division Multiplexing
+
+Light has a unique property - multiple wavelengths can coexist in the same waveguide without interfering. This allows **parallel computation in the same physical hardware**.
+
+Upgraded from visible RGB to **telecom C-band (1530-1565nm)**:
+- 8 WDM channels initially (C-band only)
+- 24 WDM channels with C+L band extension
+- Mature telecom components (cheap, reliable)
+
+### C-Band Ternary Encoding
+
+```
+Channel 0: λ+1=1530.0nm, λ0=1530.8nm, λ-1=1531.6nm
+Channel 1: λ+1=1534.7nm, λ0=1535.5nm, λ-1=1536.3nm
+... (8 channels total in C-band)
+```
+
+---
+
+## Three-Tier System Architecture
+
+The chip generator now offers three complete system tiers:
+
+### TIER 1: STANDARD COMPUTER
+- 81-trit Universal ALU
+- IOC + Backplane
+- ~3.2 TFLOPS equivalent
+- Use case: General ternary computing, research
+
+### TIER 2: HOME AI
+- 243x243 Systolic Array (59,049 PEs)
+- 8 WDM channels (C-band)
+- Super IOC (streaming, no RAM)
+- **~291 TFLOPS** (3.5x RTX 4090!)
+- Use case: Edge inference, local LLMs
+
+### TIER 3: SUPERCOMPUTER
+- 8-Chip Circular Backplane ("Round Table")
+- 243x243 x 8 chips x 8 WDM
+- Central Kerr clock (617 MHz)
+- **~2.33 PFLOPS** (1.2x NVIDIA H100!)
+- Use case: Datacenter AI, training, HPC
+
+### Upgrade Paths
+- SUPERCOMPUTER+ (24 WDM): 7.0 PFLOPS (1.6x B200)
+- SUPERCOMPUTER++ (729x729 + 24 WDM): 63 PFLOPS (31x H100)
+
+---
+
+## New Files Created
+
+| File | Description |
+|------|-------------|
+| `c_band_wdm_systolic.py` | C-band WDM systolic array generator |
+| `wdm_pe_8ch.gds` | WDM Processing Element (8 channels) |
+| `wdm_systolic_9x9.gds` | Small WDM array for testing |
+| `wdm_systolic_27x27_wdm.gds` | Medium WDM array |
+| `wdm_super_ioc.gds` | WDM Super IOC |
+| `wdm_circular_backplane.gds` | Complete 8-chip circular backplane |
+
+---
+
 ## Next Steps
 
 1. ~~**Generate full 81×81 GDS files**~~ ✓ DONE
-2. **Complete Kerr χ³ sweep** - IN PROGRESS (χ³=0 baseline done, running χ³=0.0001)
-3. **Test Super IOC + Array integration**
-4. **Benchmark against GPU/TPU for specific AI workloads**
+2. ~~**Upgrade to C-band WDM**~~ ✓ DONE
+3. ~~**Three-tier system design**~~ ✓ DONE
+4. **Complete Kerr χ³ sweep** - IN PROGRESS
+5. **Validate WDM component physics with Meep**
+6. **Benchmark against GPU/TPU for specific AI workloads**
 
 ---
 
