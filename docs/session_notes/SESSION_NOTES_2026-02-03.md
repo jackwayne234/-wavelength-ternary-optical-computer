@@ -821,12 +821,32 @@ ioa_ring_radius = 4500 μm (IOAs)
 ## █                                                                 █
 ## ███████████████████████████████████████████████████████████████████
 ##
+##   0. ★★★ START EACH SESSION BY READING THE PUBLISHED PAPER ★★★
+##      https://zenodo.org/records/18437600
+##      "Wavelength-Division Ternary Logic: Bypassing the Radix Economy Penalty"
+##      This establishes the theoretical foundation for ALL work!
+##
 ##   1. AUTO-LOG SESSION NOTES AT REGULAR INTERVALS
 ##   2. AUTO-COMMIT AND PUSH TO GITHUB AT REGULAR INTERVALS
 ##
 ##   ▶▶▶ DO NOT WAIT FOR USER TO ASK - DO THIS AUTOMATICALLY! ◀◀◀
 ##
 ## ███████████████████████████████████████████████████████████████████
+
+### ★ READ THE PAPER FIRST (MANDATORY) ★
+
+**AT THE START OF EVERY SESSION**, read the published paper:
+
+**URL:** https://zenodo.org/records/18437600
+**Title:** "Wavelength-Division Ternary Logic: Bypassing the Radix Economy Penalty in Optical Computing"
+**Author:** Christopher Riner
+
+**Why this matters:**
+- Establishes the core thesis: wavelengths bypass radix economy penalty
+- All architecture work builds on this foundation
+- Understanding the "why" is essential for making good "how" decisions
+
+---
 
 ---
 
@@ -917,6 +937,50 @@ Storage → IOA-STOR → SIOC-STOR → Data Bus → Supercomputers
 ```
 
 **Open question:** Should SIOC-STOR connect via data bus (current) or direct waveguides to each SC?
+
+---
+
+### Integrated Supercomputer - Validation Design (NEW)
+
+**Decision:** Scale back to realistic, testable design before scaling up.
+
+**New approach:**
+- 1 Supercomputer (not 8)
+- 1 Super IOC (integrated on chip)
+- Kerr clock at EXACT CENTER of PE array
+- Start with 9×9 array (80 PEs + 1 central Kerr)
+
+**New file:** `Research/programs/integrated_supercomputer.py`
+
+**Generated:**
+- `Research/data/gds/validation/integrated_supercomputer_9x9.gds` (116 KB)
+- Chip size: 640 × 840 μm
+
+**Layout:**
+```
+┌─────────────────────────────────────────────────┐
+│                   SUPER IOC                      │
+│  [IN] [IN] [IN] [IN] [IN] [IN] [IN] [IN] [IN]   │
+├─────────────────────────────────────────────────┤
+│    PE  PE  PE  PE  PE  PE  PE  PE  PE           │
+│    PE  PE  PE  PE  PE  PE  PE  PE  PE           │
+│    PE  PE  PE  PE  PE  PE  PE  PE  PE           │
+│    PE  PE  PE  PE ┌────┐ PE  PE  PE  PE         │
+│    PE  PE  PE  PE │KERR│ PE  PE  PE  PE  ← CENTER
+│    PE  PE  PE  PE └────┘ PE  PE  PE  PE         │
+│    PE  PE  PE  PE  PE  PE  PE  PE  PE           │
+│    PE  PE  PE  PE  PE  PE  PE  PE  PE           │
+│    PE  PE  PE  PE  PE  PE  PE  PE  PE           │
+├─────────────────────────────────────────────────┤
+│  [OUT][OUT][OUT][OUT][OUT][OUT][OUT][OUT][OUT]  │
+└─────────────────────────────────────────────────┘
+```
+
+**Next steps:**
+1. Simulate Kerr clock distribution with Meep
+2. Verify clock reaches all PEs with minimal skew
+3. Test end-to-end data flow
+4. If works: scale to 27×27, then 81×81
 
 ---
 
