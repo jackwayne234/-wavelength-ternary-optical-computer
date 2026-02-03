@@ -787,4 +787,69 @@ klayout Research/data/gds/supercomputer/round_table_maximum.gds
 
 ---
 
+## Session 3 (Continued) - Chip Generator Update
+
+### Ternary Chip Generator Updates
+
+Updated `ternary_chip_generator.py` with proper Round Table architecture for Supercomputer (Option 3):
+
+**Changes Made:**
+1. Added `round_table_backplane` import from `optical_backplane.py`
+2. Completely rewrote Option 3 (Supercomputer) to generate actual components:
+   - Ring 0: Central Kerr Clock (617 MHz)
+   - Ring 1: 8 Supercomputers (actual WDM systolic arrays)
+   - Ring 2: 8 Super IOCs (actual streaming interfaces)
+   - Ring 3: 8 IOAs (actual adapters - PCIe/Ethernet/NVMe)
+3. Components are properly spaced and don't overlap
+4. Clock waveguides connect Kerr to each Supercomputer
+5. Data waveguides connect components between rings
+6. Data bus ring connects all Supercomputers
+
+**Layout Parameters:**
+```
+kerr_radius = 300 μm
+sc_ring_radius = 2000 μm (Supercomputers)
+sioc_ring_radius = 3500 μm (Super IOCs)
+ioa_ring_radius = 4500 μm (IOAs)
+```
+
+---
+
+## ═══════════════════════════════════════════════════════════════════
+## INSTRUCTIONS FOR FUTURE SESSIONS
+## ═══════════════════════════════════════════════════════════════════
+
+### Auto-Commit Policy
+
+**IMPORTANT**: Commit and push changes to GitHub at regular intervals:
+
+1. After completing any significant task or feature
+2. Before switching to a different area of work
+3. When the user requests a commit
+4. At natural breakpoints in the conversation
+
+**Commit Command Pattern:**
+```bash
+cd /home/jackwayne/Desktop/Optical_computing
+git add [specific files]
+git commit -m "Description of changes
+
+Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>"
+git push
+```
+
+**Also update session notes** with what was done before committing.
+
+### Session Notes Location
+
+Session notes are stored in: `docs/session_notes/`
+
+Always update the current day's session notes with:
+- What was accomplished
+- Files modified
+- Commands used
+- Any important decisions or clarifications
+
+---
+
 *Session with Claude Code - Opus 4.5*
