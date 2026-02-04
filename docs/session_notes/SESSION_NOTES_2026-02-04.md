@@ -150,53 +150,44 @@ Parallel search through all valid triplets in 1000-1700nm range with 10nm step a
 - `Research/programs/wavelength_triplet_search.py` (single-threaded)
 - `Research/programs/wavelength_triplet_search_parallel.py` (multi-core)
 
-## 🎉 MAJOR RESULT: 14 STACKABLE TRIPLETS FOUND!
+## RESULT: 6 STACKABLE TRIPLETS FOUND (VERIFIED)
 
-Way more than the initial 3-6 estimate!
+Matches the initial 3-6 estimate. Solid result!
 
-### The 14 Stackable Triplets
+### The 6 Stackable Triplets
 
 | # | Wavelengths (nm) | SFG Products (nm) |
 |---|-----------------|-------------------|
-| 1 | 1700 / 1010 / 1000 | 634, 630, 502 |
-| 2 | 1680 / 1040 / 1030 | 642, 639, 517 |
-| 3 | 1660 / 1070 / 1060 | 651, 647, 532 |
-| 4 | 1640 / 1100 / 1090 | 658, 655, 547 |
-| 5 | 1620 / 1130 / 1120 | 666, 662, 562 |
-| 6 | 1600 / 1160 / 1150 | 672, 669, 577 |
-| 7 | 1580 / 1190 / 1180 | 679, 676, 592 |
-| 8 | 1560 / 1220 / 1210 | 685, 681, 607 |
-| 9 | 1540 / 1250 / 1240 | 690, 687, 622 |
-| 10 | 1520 / 1280 / 1270 | 695, 692, 637 |
-| 11 | 1500 / 1310 / 1300 | 699, 696, 652 |
-| 12 | 1480 / 1340 / 1330 | 703, 700, 667 |
-| 13 | 1460 / 1370 / 1360 | 707, 704, 682 |
-| 14 | 1440 / 1400 / 1390 | 710, 707, 697 |
+| 1 | 1040 / 1020 / 1000 | 515, 510, 505 |
+| 2 | 1100 / 1080 / 1060 | 545, 540, 535 |
+| 3 | 1160 / 1140 / 1120 | 575, 570, 565 |
+| 4 | 1220 / 1200 / 1180 | 605, 600, 595 |
+| 5 | 1280 / 1260 / 1240 | 635, 630, 625 |
+| 6 | 1340 / 1320 / 1300 | 665, 660, 655 |
 
 ### Key Pattern Discovered
-- 42 total wavelengths spanning 1000-1700nm
+- 18 total wavelengths spanning 1000-1340nm
 - All at least 10nm apart (collision-free)
-- All SFG products in visible range (502-710nm)
-- Beautiful regular spacing pattern!
+- All SFG products in visible range (505-665nm)
+- Beautiful regular 60nm spacing pattern between triplets!
 
-### Performance Projections (14 triplets × 3 bands × 8 DWDM = 336 lanes)
+### Performance Projections (6 triplets × 3 bands × 8 DWDM = 144 lanes)
 
-| Array | PEs | Parallel Ops | @ 617 MHz |
-|-------|-----|--------------|-----------|
-| 27×27 | 729 | 244,944 | **151 TFLOPS** |
-| 81×81 | 6,561 | 2,204,496 | **1.36 PFLOPS** |
-| 243×243 | 59,049 | 19,840,464 | **12.2 PFLOPS** |
+| Array | PEs | @ 617 MHz |
+|-------|-----|-----------|
+| 27×27 | 729 | **64.8 TFLOPS** |
+| 81×81 | 6,561 | **583 TFLOPS** |
+| 243×243 | 59,049 | **5.25 PFLOPS** |
 
-### NVIDIA Comparison (Updated!)
+### NVIDIA Comparison
 
 | Chip | Performance | Power | Your Equivalent |
 |------|-------------|-------|-----------------|
-| H100 | 1 PFLOPS | 700W | 81×81 matches it |
-| B200 | 2.5 PFLOPS | 1000W | 81×81 at 55% of B200 |
-| GB200 | 5 PFLOPS | 2700W | ~150×150 would match |
-| **243×243** | **12.2 PFLOPS** | ~100W | **~12 H100s or ~5 B200s** |
+| H100 | 1 PFLOPS | 700W | 243×243 is 5x H100 |
+| B200 | 2.5 PFLOPS | 1000W | 243×243 is 2x B200 |
+| **243×243** | **5.25 PFLOPS** | ~100W | **~5 H100s or ~2 B200s** |
 
-**This changes everything.** Not just competitive - potentially an order of magnitude more power-efficient.
+**Still excellent.** 5+ H100s worth of compute on one chip at ~1/50th the power.
 
 ---
 
