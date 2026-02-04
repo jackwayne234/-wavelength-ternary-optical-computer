@@ -69,13 +69,9 @@ def clock_distribution_simulation(
 
     cell_size = mp.Vector3(cell_x, cell_y, 0)
 
-    # Center position (Kerr location)
-    center_x = cell_x / 2
-    center_y = cell_y / 2
-
     print(f"\nGeometry:")
     print(f"  Cell: {cell_x:.0f} × {cell_y:.0f} μm")
-    print(f"  Kerr at center: ({center_x:.0f}, {center_y:.0f}) μm")
+    print(f"  Kerr at origin: (0, 0)")
 
     # Material
     n_core = 2.0  # Silicon effective index
@@ -120,7 +116,8 @@ def clock_distribution_simulation(
 
                 geometry.append(
                     mp.Block(
-                        size=mp.Vector3(WG_WIDTH, dist - KERR_RADIUS, mp.inf),
+                        # Fixed: length along e1 (toward PE), width along e2 (perpendicular)
+                        size=mp.Vector3(dist - KERR_RADIUS, WG_WIDTH, mp.inf),
                         center=mp.Vector3(
                             (start_x + pe_x) / 2,
                             (start_y + pe_y) / 2
@@ -131,20 +128,25 @@ def clock_distribution_simulation(
                     )
                 )
 
-    # Source: Gaussian pulse at center (simulating Kerr clock pulse)
+    # Source: Gaussian pulse at Kerr edge (where waveguides connect)
+    # Placed along +x axis at the edge of the Kerr region
+    # Made larger to better excite waveguide modes
+    source_size = 2.0  # μm - larger source for better coupling
     sources = [
         mp.Source(
-            mp.GaussianSource(freq, fwidth=0.1 * freq),
+            mp.GaussianSource(freq, fwidth=0.2 * freq),  # wider bandwidth
             component=mp.Ez,
-            center=mp.Vector3(0, 0),
-            size=mp.Vector3(WG_WIDTH, WG_WIDTH, 0)
+            center=mp.Vector3(KERR_RADIUS + 1.0, 0, 0),  # Just outside Kerr edge
+            size=mp.Vector3(source_size, source_size, 0)
         )
     ]
 
     # Simulation
+    # NOTE: Do NOT use geometry_center here. The geometry, sources, and monitors
+    # are all defined with origin at (0,0) = center of the Kerr. Using geometry_center
+    # would shift the coordinate system and cause monitoring points to be misaligned.
     sim = mp.Simulation(
         cell_size=cell_size,
-        geometry_center=mp.Vector3(center_x, center_y, 0),
         boundary_layers=[mp.PML(pml_thickness)],
         geometry=geometry,
         sources=sources,
@@ -153,6 +155,21 @@ def clock_distribution_simulation(
 
     # Monitor points at each PE position
     print(f"\nMonitoring {len(pe_positions)} PE positions...")
+
+    # DIAGNOSTIC: Monitor points at various distances from center
+    # This helps identify where signal drops off
+    diagnostic_distances = [
+        ("center", 0),
+        ("kerr_edge", KERR_RADIUS),
+        ("25%", KERR_RADIUS + (PE_SPACING - KERR_RADIUS) * 0.25),
+        ("50%", KERR_RADIUS + (PE_SPACING - KERR_RADIUS) * 0.50),
+        ("75%", KERR_RADIUS + (PE_SPACING - KERR_RADIUS) * 0.75),
+        ("first_pe", PE_SPACING),
+    ]
+
+    # Pick one direction for diagnostic (straight right: +x)
+    diagnostic_points = [(name, dist, 1.0, 0.0) for name, dist in diagnostic_distances]
+    diagnostic_data = {name: [] for name, _, _, _ in diagnostic_points}
 
     # Time recording for arrival analysis
     time_data = []
@@ -168,6 +185,12 @@ def clock_distribution_simulation(
             abs(sim.get_field_point(mp.Ez, mp.Vector3(0, 0)))**2
         )
 
+        # DIAGNOSTIC: Record field at each distance along +x axis
+        for name, dist, dx, dy in diagnostic_points:
+            x, y = dist * dx, dist * dy
+            field = abs(sim.get_field_point(mp.Ez, mp.Vector3(x, y)))**2
+            diagnostic_data[name].append(field)
+
         # Each PE field
         for pos in pe_positions:
             pe_x, pe_y, _, _ = pos
@@ -177,6 +200,27 @@ def clock_distribution_simulation(
     # Run simulation
     print("\nRunning FDTD simulation...")
     sim.run(mp.at_every(0.2, record_fields), until=duration)
+
+    # DIAGNOSTIC: Print where signal drops off
+    print("\n" + "="*60)
+    print("DIAGNOSTIC: Signal strength along +X axis")
+    print("="*60)
+    print(f"{'Location':<15} {'Distance (μm)':<15} {'Peak Intensity':<15}")
+    print("-"*60)
+    for name, dist, _, _ in diagnostic_points:
+        peak = np.max(diagnostic_data[name]) if diagnostic_data[name] else 0
+        print(f"{name:<15} {dist:<15.1f} {peak:<15.6f}")
+    print("-"*60)
+
+    # Identify drop-off point
+    peaks = [(name, np.max(diagnostic_data[name])) for name, _, _, _ in diagnostic_points]
+    for i, (name, peak) in enumerate(peaks):
+        if i > 0 and peak < peaks[0][1] * 0.01:  # <1% of center
+            print(f"⚠ Signal drops below 1% at: {name}")
+            break
+    else:
+        if peaks[-1][1] > peaks[0][1] * 0.01:
+            print(f"✓ Signal reaches first PE with {peaks[-1][1]/peaks[0][1]*100:.1f}% of source intensity")
 
     # Analyze arrival times
     print("\nAnalyzing clock arrival times...")

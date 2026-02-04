@@ -31,6 +31,37 @@ source .mamba_env/bin/activate
 .mamba_env/bin/python3 Research/programs/simulations/kerr_resonator_sim.py --sweep-power
 ```
 
+## Cloud Simulations (Large Jobs)
+
+For heavy simulations (like 81x81 PE arrays), use the cloud runner to spin up an AWS EC2 instance:
+
+```bash
+# One-time setup
+pip install boto3 paramiko scp
+aws configure  # Enter your AWS credentials
+export AWS_KEY_PATH="~/.ssh/your-key.pem"
+export AWS_KEY_NAME="your-key-name"
+
+# Run simulation on 64-core cloud instance (512GB RAM)
+python cloud_runner.py --sim kerr_resonator_sim.py --cores 64 --ram 512
+
+# Use spot instances for 60-70% savings
+python cloud_runner.py --sim kerr_resonator_sim.py --cores 64 --spot
+
+# List available instance sizes
+python cloud_runner.py --list-servers
+```
+
+Results download to `Research/data/cloud_results/`.
+
+| Instance | vCPUs | RAM | On-Demand | Spot |
+|----------|-------|-----|-----------|------|
+| r7i.16xlarge | 64 | 512GB | $4.03/hr | $1.40/hr |
+| r7i.24xlarge | 96 | 768GB | $6.05/hr | $2.10/hr |
+| r7i.48xlarge | 192 | 1.5TB | $12.10/hr | $4.20/hr |
+
+Instance auto-terminates when done.
+
 ## Output Locations
 
 - CSV data: `Research/data/csv/`
