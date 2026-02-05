@@ -63,6 +63,8 @@ This is a **Ternary Processing Unit (TPU)** - an AI accelerator optimized for pa
 
 We could theoretically keep climbing (3^3^3^3, 3^3^3^3^3, etc.) until we hit IOC encoding limits. Each level up multiplies the representable range while the optical hardware stays identical.
 
+**Bottleneck engineering:** After finding IOC limits, test the transistor interface (PCIe, host CPU). Optimize to the weakest link - no point pushing IOC to 3^3^3^3 if PCIe chokes at 3^3^3.
+
 </details>
 
 The optical approach eliminates the heat and power constraints that limit electronic accelerators, while delivering raw performance that exceeds anything silicon can achieve.

@@ -246,6 +246,29 @@ The IOC conversion time is approximately **6.5ns** - negligible compared to comp
 
 Theoretically, we could keep going: 3^3^3^3, 3^3^3^3^3, etc. Each level multiplies effective throughput. Testing the IOC to find its practical ceiling is future research.
 
+### Finding the Optimal Tower Height: Bottleneck Engineering
+
+The system has three potential bottlenecks, tested in sequence:
+
+```
+Optical Compute → IOC → Transistor Interface (PCIe/Host)
+   (unlimited)     (?)         (?)
+```
+
+**Step 1: Test the IOC ceiling**
+- Push tower height until IOC precision degrades
+- Find max encoding/decoding accuracy
+
+**Step 2: Test the transistor interface**
+- PCIe bandwidth, host CPU/memory capabilities
+- What's the largest number representation it can handle efficiently?
+
+**Step 3: Optimize to the weakest link**
+- If IOC maxes out at 3^3^3^3 but PCIe chokes at 3^3^3 → use 3^3^3
+- No point over-engineering one stage if another bottlenecks first
+
+The optical compute is effectively unlimited - it just does add/subtract regardless of tower height. The real engineering challenge is matching the IOC to what the electronic interface can actually consume.
+
 ### Performance Impact
 
 With 3^3 = 27 state encoding (scaled configuration):
