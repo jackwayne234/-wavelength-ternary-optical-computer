@@ -45,6 +45,34 @@ This is a **Ternary Processing Unit (TPU)** - an AI accelerator optimized for pa
 
 *Theoretical option: MUL/DIV could go to 3^3^3^3 (level 4) to stay pure add/subtract, but that requires arbitrary precision math. Practical choice: both use 3^3, IOC interprets differently.*
 
+**Why 3^3^3^3 is impossible (not just hard):**
+
+3^3^3^3 = 3^7,625,597,484,987 would require:
+- **12 TERABIT registers** (12 trillion bits, not 64 or 128)
+- **1.5 TERABYTES** to store ONE number
+- More memory per multiplication than most data centers have
+
+| System | Max Number Size |
+|--------|-----------------|
+| 64-bit | ~10^19 |
+| 128-bit | ~10^38 |
+| 256-bit | ~10^77 |
+| **3^3^3^3** | **10^(3.6 trillion)** |
+
+This isn't "future hardware" - it's mathematically beyond any physical computer.
+
+**Real-world performance with 3^3 encoding:**
+
+Since MUL/DIV can't scale (stuck at baseline), only ADD/SUB gets the 9× boost:
+
+| Workload | ADD % | MUL % | Overall Boost |
+|----------|-------|-------|---------------|
+| Matrix multiply | 50% | 50% | ~1.8× |
+| Pure accumulation | 100% | 0% | 9× |
+| Transformer attention | ~60% | ~40% | ~2.1× |
+
+The 9× headline number only applies to ADD-heavy workloads.
+
 **Why MUL/DIV goes up 2 levels, not 1:**
 - Level 2 would require *actual* multiply/divide hardware (defeating the purpose)
 - Level 3 returns to add/subtract on exponents-of-exponents

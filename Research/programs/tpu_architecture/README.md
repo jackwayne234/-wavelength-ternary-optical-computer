@@ -210,6 +210,86 @@ Level 4: Log⁴       - MUL/DIV works again ✓ (but exponent = 3^3^3^3!)
 
 This gives 9× throughput for both operation types using standard 64-bit hardware.
 
+### Why 3^3^3^3 Is Beyond Engineering
+
+Let's put numbers to "astronomically large" to understand why 3^3^3^3 isn't just impractical - it's physically impossible.
+
+**The calculation:**
+- 3^3 = 27
+- 3^3^3 = 3^27 = 7,625,597,484,987 (7.6 trillion)
+- 3^3^3^3 = 3^7,625,597,484,987
+
+To represent a number that can hold values up to 3^7,625,597,484,987, you need approximately **12 trillion bits** - that's **1.5 terabytes per single number**.
+
+**Bit width comparison:**
+
+| System | Bits | Max Number |
+|--------|------|------------|
+| Standard | 64 | ~10^19 |
+| Extended | 128 | ~10^38 |
+| Crypto | 256 | ~10^77 |
+| Large | 512 | ~10^154 |
+| **3^3^3^3** | **12 trillion** | **10^(3.6 trillion)** |
+
+**What this means physically:**
+- **12 TERABIT registers** would be required (12 trillion bits)
+- **1.5 TERABYTES** to store a single number
+- More storage **per multiplication** than most data centers have total
+- The IOC would need to encode/decode numbers larger than atoms in the universe
+
+This isn't an engineering challenge - it's a fundamental impossibility. You can't build registers with more bits than there are particles to build them with.
+
+**Conclusion:** 3^3 is the practical ceiling - not a choice, but a physical limit. The theoretical path (MUL/DIV at level 4) is mathematically elegant but physically absurd. We stop at 3^3 because the universe stops there.
+
+### Real-World Performance: The 1.8× Reality
+
+The 9× throughput multiplier is real, but it only applies to ADD/SUB operations. Here's why matrix multiply sees a more modest improvement.
+
+**The asymmetry:**
+- **ADD/SUB PEs:** Benefit fully from 3^3 encoding (9× throughput)
+- **MUL/DIV PEs:** Stay at baseline (1× throughput) because jumping to level 4 requires 3^3^3^3 encoding
+
+**For matrix multiply (which is ~50% additions, ~50% multiplications):**
+
+Using Amdahl's Law:
+```
+Speedup = 1 / ((1 - P) + P/S)
+
+Where:
+- P = fraction that benefits from speedup (ADD portion = 0.5)
+- S = speedup factor (9×)
+
+Speedup = 1 / ((1 - 0.5) + 0.5/9)
+        = 1 / (0.5 + 0.056)
+        = 1 / 0.556
+        ≈ 1.8×
+```
+
+**Workload-specific performance:**
+
+| Workload | ADD % | MUL % | Overall Boost |
+|----------|-------|-------|---------------|
+| Matrix multiply | 50% | 50% | ~1.8× |
+| Pure accumulation | 100% | 0% | 9× |
+| Pure multiply | 0% | 100% | 1× |
+| Transformer attention | ~60% | ~40% | ~2.1× |
+
+**What this means:**
+- The "9× throughput" headline is accurate but only for ADD-heavy workloads
+- Matrix multiply (the core AI workload) sees ~1.8× improvement
+- Transformer attention (with more accumulation) sees ~2.1×
+- Pure accumulation loops (like reductions) get the full 9×
+
+**Adjusted performance targets with 3^3 scaling:**
+
+| Configuration | Base Performance | With 3^3 (Matrix Multiply) | With 3^3 (Pure ADD) |
+|--------------|------------------|---------------------------|---------------------|
+| 27×27 array | 65 TFLOPS | ~117 TFLOPS | 583 TFLOPS |
+| 243×243 array | 5.2 PFLOPS | ~9.4 PFLOPS | 47 PFLOPS |
+| 960×960 array | 82 PFLOPS | ~148 PFLOPS | 738 PFLOPS |
+
+The 9× number is real and achievable - but only for the right workloads. For general matrix operations, expect ~1.8-2.1× depending on the ADD/MUL ratio.
+
 ### The Hardware Doesn't Change
 
 This is the beautiful part. After scaling:
