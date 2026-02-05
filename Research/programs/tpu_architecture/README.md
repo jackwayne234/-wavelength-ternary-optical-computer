@@ -247,6 +247,30 @@ The IOC conversion time is approximately **6.5ns** - negligible compared to comp
 
 Theoretically, we could keep going: 3^3^3^3, 3^3^3^3^3, etc. Each level multiplies effective throughput. Testing the IOC to find its practical ceiling is future research.
 
+### The North Star: Frontier on a Laptop
+
+Here's what tower scaling makes possible. Consider a **27×27 chip** (~729 PEs):
+
+| Tower Levels | Effective Throughput | Equivalent To |
+|--------------|---------------------|---------------|
+| Base (3) | ~65 TFLOPS | High-end GPU |
+| +1 level (3^3) | ~583 TFLOPS | Small cluster |
+| +2 levels | ~5.2 PFLOPS | Supercomputer node |
+| +3 levels | ~47 PFLOPS | Major HPC system |
+| +4-5 levels | ~400-1,200 PFLOPS | **Frontier** |
+
+**Frontier today:**
+- 9,400 nodes, 37,000 GPUs
+- 21 megawatts, warehouse-sized
+- Oak Ridge National Lab
+
+**Frontier on a laptop (if IOC hits ~5 levels):**
+- One 27×27 optical chip
+- ~10-50 watts, battery-powered
+- Fits in your backpack
+
+The optical hardware doesn't know it's small - it's just adding wavelengths. The IOC decides whether each operation means "trit + trit" or "tower + tower." Validating how high the IOC can climb is the key engineering challenge.
+
 ### Finding the Optimal Tower Height: Bottleneck Engineering
 
 The system has three potential bottlenecks, tested in sequence:
