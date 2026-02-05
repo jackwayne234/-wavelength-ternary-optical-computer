@@ -201,9 +201,16 @@ $$T_{960} = 921,600 \times 144 \times 617 \text{ MHz} = 81.9 \text{ Peta-ops/s}$
 | **243×243 Optical** | **5.25 PFLOPS** | **~100W** | **52.5 TFLOPS/W** |
 | **960×960 Optical** | **82 PFLOPS** | **~200-400W** | **205-410 TFLOPS/W** |
 
-**Key comparisons:**
+**Key comparisons (960×960 optical vs B200):**
+
+| Mode | Multiplier | Use Case |
+|------|------------|----------|
+| **Base** | **33×** | General compute, mixed workloads |
+| **Matrix Multiply (AI)** | **~59×** | Deep learning, transformers (1.8× log-domain boost) |
+| **Pure ADD** | **295×** | Accumulation-heavy, reductions, streaming sums |
+
 - 243×243 optical = **2× B200 at 1/10th the power**
-- 960×960 optical = **33× B200**
+- 960×960 optical = **33× to 295× B200** depending on workload
 
 ### 7.2 vs World's Fastest Supercomputer
 
