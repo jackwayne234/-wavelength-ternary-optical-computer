@@ -62,9 +62,13 @@ This isn't a general-purpose CPU replacement - it's a **Ternary Processing Unit 
 
 **15 chips = Frontier at 0.03% of the power**
 
-### Future Exploration: 3^3 Encoding
+### Currently Working On
 
-*For future development:* Using 3^3 = 27 states with log-domain encoding could provide 9× throughput (738 PFLOPS max) with simpler hardware (add/subtract only). Physical implementation of 27-state encoding is an open research question to explore.
+| Track | Description | Status |
+|-------|-------------|--------|
+| **IOC Hardware** | Input/Output Converter - bridge between binary systems and optical ternary chip | Spec complete, seeking FPGA prototype |
+| **Driver Software** | PCIe drivers and software API for host integration | Collaborator onboard |
+| **3^3 Encoding** | Log-domain encoding to make existing hardware 9× faster at crunching bigger numbers | Exploring theory |
 
 ### What's Been Validated
 
