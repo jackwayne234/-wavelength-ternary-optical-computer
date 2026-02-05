@@ -272,6 +272,60 @@ The whole reason AI is stuck in datacenters is power/heat. Remove that constrain
 
 ---
 
+## Practical Roadmap: From Validation to Working Hardware
+
+### The Team
+- **Christopher:** Vision, architecture, simulations, validation
+- **Wife:** Reality checks, grounding, priorities
+- **AWS Buddy:** Drivers (already built ternary sim 15 years ago!), low-level code, industry connections
+- **Claude:** Research, simulations, documentation
+
+### Cost-Reduction Strategy: Multi-Project Wafer (MPW)
+Share fab costs with other researchers:
+- Full custom wafer run: $50K - $500K
+- MPW photonics run: $10K - $50K
+- Shared with 5-10 people: **$5K - $15K each**
+
+**Photonic MPW services:**
+- AIM Photonics (US, sometimes subsidized)
+- IMEC (Belgium)
+- Applied Nanotools
+- LioniX, CompoundTek
+
+### Parallel Development Path
+
+**Track 1: Continue Validation (now)**
+- 81×81 clock skew (running now)
+- 243×243 if 81×81 passes (~$300-500)
+- Complete scaling validation
+
+**Track 2: IOC Development (while saving)**
+- Prototype on FPGA ($100-500 dev board)
+- Implement binary↔ternary conversion in Verilog/VHDL
+- Test with simulated signals first
+- Will be ready when optical chip arrives
+
+**Track 3: Drivers (buddy can lead)**
+- PCIe interface code
+- OS integration
+- May already have ternary driver concepts from his old simulation
+
+**Track 4: Save for fab run**
+- Find MPW partners through buddy's AWS contacts
+- Target: $5K-15K for shared run
+- "Save up for a year" doable, not "need VC" doable
+
+### End Goal
+Plug-and-play PCIe card:
+1. Optical ternary compute core
+2. IOC interface chip
+3. PCIe interface
+4. Driver software
+
+**Result:** Local LLMs on a desktop. No cloud. No datacenter. Just works.
+
+---
+
 ## Personal Context Captured
 
 ### Christopher's Cognitive Profile
