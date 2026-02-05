@@ -177,42 +177,38 @@ Both PE types perform the **same physical operation** (optical add/subtract). Th
 
 To increase compute density, we push each PE type up the tower:
 
-| PE Type | Baseline Level | Scaled Level | New capability | States |
-|---------|---------------|--------------|----------------|--------|
-| **ADD/SUB PE** | 0 → | 2 | Power towers (via add) | 3^3 = 27 |
-| **MUL/DIV PE** | 1 → | 3 | Hyper operations (via add) | 3^3^3 |
+| PE Type | Baseline Level | Scaled Encoding | Trit Represents |
+|---------|---------------|-----------------|-----------------|
+| **ADD/SUB PE** | 0 (linear) | 3^3 | trit³ |
+| **MUL/DIV PE** | 1 (log) | 3^3 | trit³ (in log domain) |
 
-**Critical detail:** Notice that ADD/SUB jumps from 0 to 2 (skipping 1), and MUL/DIV jumps from 1 to 3 (skipping 2). This isn't arbitrary - it's necessary.
+**Practical decision:** Both PE types use **3^3 encoding**. The IOC interprets them differently based on PE type.
 
-### Why the Asymmetry? The Alternating Pattern
+*Theoretical alternative: MUL/DIV could jump to level 4 (3^3^3^3) to stay pure add/subtract on exponents, but 3^3^3^3 is astronomically large and requires arbitrary precision math. The practical choice is 3^3 for both.*
+
+### Why 3^3 For Both? The Practical Tradeoff
 
 The levels alternate between "add/sub friendly" and "mul/div required":
 
 ```
-Level 0: Linear domain
-         ├─ Addition → add         ✓ (add/sub hardware works)
-         └─ Multiplication → ???   ✗ (needs mul hardware)
-
-Level 1: Log domain
-         ├─ Multiplication → add   ✓ (add/sub hardware works)
-         └─ Exponentiation → ???   ✗ (needs mul hardware)
-
-Level 2: Log-log domain
-         ├─ Exponentiation → add   ✓ (add/sub hardware works)
-         └─ Power tower → ???      ✗ (needs mul hardware)
-
-Level 3: Log-log-log domain
-         ├─ Power tower → add      ✓ (add/sub hardware works)
-         └─ Hyper-4 → ???          ✗ (needs mul hardware)
+Level 0: Linear      - ADD/SUB works ✓
+Level 1: Log         - MUL/DIV works ✓ (add/sub = mul/div)
+Level 2: Log-log     - needs actual mul/div ✗
+Level 3: Log³       - needs actual mul/div ✗
+Level 4: Log⁴       - MUL/DIV works again ✓ (but exponent = 3^3^3^3!)
 ```
 
-**The rule:** At each level, ONE class of operations becomes add/subtract, while the NEXT harder class still requires multiplication.
+**The theoretical path:**
+- ADD/SUB: Level 0 → Level 2 = 3^3 ✓
+- MUL/DIV: Level 1 → Level 4 = 3^3^3^3 (skipping levels 2 AND 3)
 
-So when scaling:
-- **ADD/SUB PEs** must land on EVEN levels (0, 2, 4...) where addition IS addition
-- **MUL/DIV PEs** must land on ODD levels (1, 3, 5...) where multiplication IS addition
+**The problem:** 3^3^3^3 = 3^(3^27) = 3^7,625,597,484,987. That doesn't fit in any standard numeric type. You'd need arbitrary precision math, adding latency and complexity.
 
-Jumping to an intermediate level would require actual multiply hardware, which defeats the purpose.
+**The practical solution:** Both use **3^3 encoding**. The IOC interprets based on PE type:
+- ADD/SUB PEs: trit³ represents addition values
+- MUL/DIV PEs: trit³ represents multiplication values (in log domain)
+
+This gives 9× throughput for both operation types using standard 64-bit hardware.
 
 ### The Hardware Doesn't Change
 

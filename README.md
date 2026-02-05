@@ -40,8 +40,10 @@ This is a **Ternary Processing Unit (TPU)** - an AI accelerator optimized for pa
 
 | PE Type | Baseline | Scaled Mode | Trit Represents |
 |---------|----------|-------------|-----------------|
-| ADD/SUB | Level 0 (values) | Level 2 | trit³ (3^3 range) |
-| MUL/DIV | Level 1 (exponents) | Level 3 | trit^(3^3) (3^3^3 range) |
+| ADD/SUB | Level 0 (values) | 3^3 | trit³ |
+| MUL/DIV | Level 1 (log domain) | 3^3 | trit³ (interpreted as log) |
+
+*Theoretical option: MUL/DIV could go to 3^3^3^3 (level 4) to stay pure add/subtract, but that requires arbitrary precision math. Practical choice: both use 3^3, IOC interprets differently.*
 
 **Why MUL/DIV goes up 2 levels, not 1:**
 - Level 2 would require *actual* multiply/divide hardware (defeating the purpose)
