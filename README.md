@@ -70,6 +70,31 @@ The optical TPU uses a **Round Table** architecture:
 3. **Systolic Propagation**: Each PE performs ternary MAC (multiply-accumulate) using SFG (Sum-Frequency Generation)
 4. **Output Collection**: Results accumulate at the output edge and convert back to binary
 
+### How Weights Are Stored in PEs (Bistable Kerr Flip-Flops)
+
+Each PE contains a **weight register** built from bistable Kerr resonators. The Kerr effect (χ³ nonlinearity) creates two stable optical states - the resonator "locks" into one based on input wavelength:
+
+| Stored Value | Wavelength | How It's Set |
+|--------------|------------|--------------|
+| **-1** | 1550nm locked | High-power 1550nm pulse |
+| **0** | 1310nm locked | High-power 1310nm pulse |
+| **+1** | 1064nm locked | High-power 1064nm pulse |
+
+**Writing weights:** Assert WRITE_ENABLE, inject desired wavelength at high power, release. The resonator stays locked (~10ns per write).
+
+**Example - Loading a 3×3 matrix:**
+```
+W = | +1  -1   0 |     Clock 1: Inject 1064nm, 1550nm, 1310nm → Row 0
+    |  0  +1  +1 |     Clock 2: Inject 1310nm, 1064nm, 1064nm → Row 1
+    | -1   0  -1 |     Clock 3: Inject 1550nm, 1310nm, 1550nm → Row 2
+
+Total: 3 clocks = ~4.9ns for 3×3 | ~131ns for 81×81
+```
+
+**During compute:** Weights don't need "reading" - they continuously emit their stored wavelength, mixing with streaming inputs via SFG. Weights are stationary, data flows through. No refresh needed (unlike DRAM).
+
+*Full details: [TPU Architecture README](Research/programs/tpu_architecture/README.md)*
+
 ### Wavelength Multiplexing
 
 Each PE operates on **6 stackable wavelength triplets** = 144 WDM channels, enabling massive parallelism without physical routing complexity.
