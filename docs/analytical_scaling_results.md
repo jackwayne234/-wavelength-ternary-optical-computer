@@ -210,30 +210,22 @@ $$T_{960} = 921,600 \times 144 \times 617 \text{ MHz} = 81.9 \text{ Peta-ops/s}$
 | System | Performance | Power |
 |--------|-------------|-------|
 | Frontier (Oak Ridge) | 1,200 PFLOPS | 21 MW |
-| 15 Optical Chips (base-3) | 1,230 PFLOPS | ~6 kW |
-| **2 Optical Chips (3^3)** | **1,476 PFLOPS** | **~800W** |
+| **15 Optical Chips** | **1,230 PFLOPS** | **~6 kW** |
 
-**2 optical chips (3^3 encoding) = Frontier at 0.004% of the power**
+**15 optical chips = Frontier at 0.03% of the power**
 
 ---
 
-## 7.3 3^3 Encoding (27 States) - 9× Throughput
+## 7.3 Future Exploration: 3^3 Encoding (27 States)
 
-Using 3^3 = 27 states instead of base-3 (3 states) with log-domain encoding:
+*For future development:* Using 3^3 = 27 states instead of base-3 (3 states) with log-domain encoding could provide:
 
-**Multiplier:** 27 ÷ 3 = **9×** information per operation
+- **9× throughput multiplier** (27 ÷ 3 = 9)
+- **Simpler hardware** (only add/subtract needed, no multiply/divide)
+- **738 PFLOPS** at 960×960 scale
+- **2 chips = Frontier** instead of 15
 
-**Hardware simplification:** Only add/subtract needed (no multiply/divide)
-
-| Array | Base-3 Throughput | 3^3 Throughput | vs B200 (2.5 PFLOPS) |
-|-------|-------------------|----------------|----------------------|
-| 27 × 27 | 64.8 TOps/s | **583 TOps/s** | 0.23× |
-| 81 × 81 | 583 TOps/s | **5.25 POps/s** | 2.1× |
-| 243 × 243 | 5.25 POps/s | **47 POps/s** | 19× |
-| 729 × 729 | 47.2 POps/s | **425 POps/s** | 170× |
-| 960 × 960 | 81.9 POps/s | **738 POps/s** | **295×** |
-
-**Key insight:** The hardware becomes SIMPLER (just adders) while throughput INCREASES 9×. Log-domain encoding converts additions into multiplications, eliminating the need for multiply/divide circuits.
+Physical implementation of 27-state encoding is an open research question. Current validated numbers use base-3 (3 states).
 
 ---
 
