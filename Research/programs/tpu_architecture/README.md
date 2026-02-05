@@ -138,10 +138,14 @@ No refresh cycles needed (unlike DRAM). Weights persist until explicitly overwri
 | 243×243 array | 5.2 PFLOPS | ~9.4 PFLOPS | 47 PFLOPS |
 | 960×960 array | 82 PFLOPS | ~148 PFLOPS | 738 PFLOPS |
 
-**Frontier comparison (1,200 PFLOPS):**
-- Base mode: 15 chips = Frontier
-- 3^3 matrix multiply: **8 chips = Frontier** (realistic AI workloads)
-- 3^3 pure ADD: 2 chips = Frontier (accumulation-heavy workloads only)
+**Comparison vs NVIDIA AI Accelerators:**
+
+| Reference | Performance | Our 960×960 (Base) | Our 960×960 (3^3 MatMul) |
+|-----------|-------------|--------------------|-----------------------|
+| **B200** | 2.5 PFLOPS | **33×** | **59×** |
+| **H100** | ~2 PFLOPS | **41×** | **74×** |
+
+A single 960×960 optical chip delivers **33-74× the throughput** of NVIDIA's flagship AI accelerators, depending on workload and encoding mode.
 
 *See "Real-World Performance" section for why matrix multiply sees ~1.8× instead of 9×*
 
@@ -279,18 +283,18 @@ Speedup = 1 / ((1 - 0.5) + 0.5/9)
 | Pure accumulation | 100% | 0% | 9× | Reductions, sums |
 | Pure multiply | 0% | 100% | 1× | No improvement |
 
-**What this means for Frontier comparisons:**
+**What this means vs NVIDIA AI Accelerators:**
 
-| Mode | 960×960 Performance | Chips to match Frontier (1,200 PFLOPS) |
-|------|---------------------|---------------------------------------|
-| Base (no 3^3) | 82 PFLOPS | 15 chips |
-| **3^3 matrix multiply** | **~148 PFLOPS** | **8 chips** |
-| 3^3 pure ADD | 738 PFLOPS | 2 chips |
+| Mode | 960×960 Performance | vs B200 (2.5 PFLOPS) | vs H100 (~2 PFLOPS) |
+|------|---------------------|---------------------|---------------------|
+| Base (no 3^3) | 82 PFLOPS | **33×** | **41×** |
+| **3^3 matrix multiply** | **~148 PFLOPS** | **59×** | **74×** |
+| 3^3 pure ADD | 738 PFLOPS | 295× | 369× |
 
 **Key takeaways:**
-- **For realistic AI workloads (matrix multiply): 8 chips = Frontier**
-- The "2 chips = Frontier" claim only holds for pure ADD workloads (e.g., accumulation loops)
-- The 9× number is mathematically correct but applies to a limited subset of operations
+- **For realistic AI workloads (matrix multiply): 59× a B200, 74× an H100**
+- The pure ADD numbers (295×/369×) only apply to accumulation-heavy workloads
+- The 9× throughput multiplier is mathematically correct but applies to a limited subset of operations
 - Matrix multiply (GEMM) - which dominates training and inference - sees ~1.8×
 
 **Adjusted performance targets with 3^3 scaling:**
@@ -336,7 +340,7 @@ The IOC conversion time is approximately **6.5ns** - negligible compared to comp
 
 Theoretically, we could keep going: 3^3^3^3, 3^3^3^3^3, etc. Each level multiplies effective throughput. Testing the IOC to find its practical ceiling is future research.
 
-### The North Star: Frontier on a Laptop
+### The North Star: Datacenter-Class AI on a Laptop
 
 Here's what tower scaling makes possible. Consider a **27×27 chip** (~729 PEs):
 
@@ -344,23 +348,26 @@ Here's what tower scaling makes possible. Consider a **27×27 chip** (~729 PEs):
 |--------------|--------------------------------|---------------------------------------|---------------|
 | Base (3) | ~65 TFLOPS | ~65 TFLOPS | High-end GPU |
 | +1 level (3^3) | ~583 TFLOPS | ~117 TFLOPS | Small cluster |
-| +2 levels | ~5.2 PFLOPS | ~1.0 PFLOPS | Supercomputer node |
-| +3 levels | ~47 PFLOPS | ~9.4 PFLOPS | Major HPC system |
-| +4-5 levels | ~400-1,200 PFLOPS | ~80-240 PFLOPS | **Frontier** (pure ADD only) |
+| +2 levels | ~5.2 PFLOPS | ~1.0 PFLOPS | **~0.5× B200** |
+| +3 levels | ~47 PFLOPS | ~9.4 PFLOPS | **~4× B200** |
+| +4-5 levels | ~400-1,200 PFLOPS | ~80-240 PFLOPS | **32-96× B200** |
 
 *Note: Matrix multiply throughput is ~1.8× base due to Amdahl's Law (50% ADD at 9×, 50% MUL at 1×). Pure ADD workloads get the full tower multiplier.*
 
-**Frontier today:**
-- 9,400 nodes, 37,000 GPUs
-- 21 megawatts, warehouse-sized
-- Oak Ridge National Lab
+**NVIDIA's flagship AI accelerator (B200) today:**
+- 2.5 PFLOPS per chip
+- ~1000W TDP
+- Requires datacenter cooling and power infrastructure
 
-**Frontier on a laptop (if IOC hits ~5 levels):**
+**Equivalent AI throughput on a laptop (if IOC hits ~5 levels):**
 - One 27×27 optical chip
 - ~10-50 watts, battery-powered
 - Fits in your backpack
+- **32-96× the throughput of a B200**
 
 The optical hardware doesn't know it's small - it's just adding wavelengths. The IOC decides whether each operation means "trit + trit" or "tower + tower." Validating how high the IOC can climb is the key engineering challenge.
+
+> **Note on Frontier comparisons:** You may see references elsewhere comparing optical chips to Frontier (1,200 PFLOPS). Frontier is a general-purpose scientific supercomputer at Oak Ridge National Lab - not an AI accelerator. While the raw FLOPS comparison is dramatic (a few chips matching an exascale supercomputer), it's misleading for AI workloads. The relevant comparison for TPU/AI accelerator work is against NVIDIA's B200/H100, which are purpose-built for the same tensor operations we target.
 
 ### Finding the Optimal Tower Height: Bottleneck Engineering
 

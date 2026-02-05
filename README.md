@@ -26,11 +26,11 @@ This is a **Ternary Processing Unit (TPU)** - an AI accelerator optimized for pa
 
 **Why this matters:** AI workloads are dominated by matrix multiplications - exactly what this architecture excels at. The optical approach isn't just more efficient - it's *more powerful*:
 
-| Configuration | Performance | vs B200 (2.5 PFLOPS) | vs Frontier (1,200 PFLOPS) |
-|---------------|-------------|----------------------|----------------------------|
-| **Base mode** | 82 PFLOPS / chip | 33× | 15 chips = Frontier |
-| **3^3 mode (matrix multiply)** | ~148 PFLOPS / chip | ~59× | **8 chips = Frontier** |
-| **3^3 mode (pure ADD)** | 738 PFLOPS / chip | 295× | 2 chips = Frontier |
+| Configuration | Performance | vs B200 (2.5 PFLOPS) | vs H100 (~2 PFLOPS) |
+|---------------|-------------|----------------------|---------------------|
+| **Base mode** | 82 PFLOPS / chip | 33× | 41× |
+| **3^3 mode (matrix multiply)** | ~148 PFLOPS / chip | ~59× | ~74× |
+| **3^3 mode (pure ADD)** | 738 PFLOPS / chip | 295× | 369× |
 
 *3^3 mode: Same hardware, same 3 states. The IOC reinterprets each trit as trit³ in log-log domain - adding/subtracting exponents is the same as multiplying/dividing the original numbers.*
 
@@ -189,25 +189,18 @@ This isn't experimental - it's **mature telecom technology**. The fiber optic in
 
 *H-tree routing scales logarithmically - going from 729 to 531,441 PEs (729x bigger) only doubles skew from 2.4% to 4.8%*
 
-### vs NVIDIA B200
+### vs NVIDIA B200 / H100
 
 | System | Performance | Power |
 |--------|-------------|-------|
-| NVIDIA B200 | 2.5 PFLOPS | 1,000W |
+| NVIDIA B200 | 2.5 PFLOPS | ~1,000W |
+| NVIDIA H100 | ~2 PFLOPS (FP16 tensor) | ~700W |
 | **243x243 Optical** | **5.25 PFLOPS** | **~100W** |
 | **960x960 Optical** | **82 PFLOPS** | **~200-400W** |
 
-**243x243 = 2x B200 at 1/10th the power**
-**960x960 = 33x B200**
-
-### vs Frontier (World's Fastest Supercomputer)
-
-| System | Performance | Power |
-|--------|-------------|-------|
-| Frontier (Oak Ridge) | 1,200 PFLOPS | 21 MW |
-| **15 Optical Chips** | **1,230 PFLOPS** | **~6 kW** |
-
-**15 chips = Frontier at 0.03% of the power**
+**Base mode (82 PFLOPS):** 33× B200, 41× H100
+**3^3 matrix multiply (~148 PFLOPS):** ~59× B200, ~74× H100
+**3^3 pure ADD (738 PFLOPS):** 295× B200, 369× H100
 
 ### What's Been Validated
 
@@ -343,6 +336,19 @@ python3 Phase2_Fiber_Benchtop/firmware/sfp_tuner.py
 ### CPU Architecture
 
 > **Note:** The sections below document an alternative general-purpose CPU approach. The main focus of this project is now the TPU/AI accelerator architecture described above. This CPU work is preserved for reference and potential future exploration.
+
+#### vs Frontier (General-Purpose Supercomputer)
+
+Frontier is a general-purpose scientific supercomputer optimized for simulations with complex branching and irregular memory access - workloads that would suit a general-purpose optical CPU, not a matrix-focused TPU. We include this comparison here because it's more relevant to CPU-style workloads.
+
+| System | Performance | Power |
+|--------|-------------|-------|
+| Frontier (Oak Ridge) | 1,200 PFLOPS | 21 MW |
+| **15 Optical Chips** | **1,230 PFLOPS** | **~6 kW** |
+
+**15 chips = Frontier at 0.03% of the power**
+
+*However, this comparison is academic - our TPU architecture is optimized for matrix operations (AI workloads), not the diverse scientific simulations Frontier handles. A fair comparison would be our optical TPU vs NVIDIA's AI accelerators (B200/H100), which is covered in the TPU section above.*
 
 #### General-Purpose Optical CPU
 
