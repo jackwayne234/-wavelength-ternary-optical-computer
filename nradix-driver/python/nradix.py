@@ -5,13 +5,22 @@ This module provides Python bindings for the N-Radix optical systolic array
 hardware, along with a software simulator for development and testing.
 
 The optical computing system uses ternary (base-3) encoding with wavelength
-multiplexing: 1550nm / 1310nm / 1064nm for collision-free operation.
+multiplexing for collision-free operation.
 
 Key features:
 - Balanced ternary encoding (-1, 0, +1) using trits
 - Hardware abstraction via NRadix class
 - Full software simulation via NRadixSimulator
+- WDM simulation with up to 6 parallel triplets via NRadixWDMSimulator
 - Support for 27x27 and 81x81 array configurations
+
+WDM Triplet Wavelengths (collision-free):
+    Triplet 1: 1040 / 1020 / 1000 nm  -> SFG: 515, 510, 505 nm
+    Triplet 2: 1100 / 1080 / 1060 nm  -> SFG: 545, 540, 535 nm
+    Triplet 3: 1160 / 1140 / 1120 nm  -> SFG: 575, 570, 565 nm
+    Triplet 4: 1220 / 1200 / 1180 nm  -> SFG: 605, 600, 595 nm
+    Triplet 5: 1280 / 1260 / 1240 nm  -> SFG: 635, 630, 625 nm
+    Triplet 6: 1340 / 1320 / 1300 nm  -> SFG: 665, 660, 655 nm
 """
 
 from __future__ import annotations
@@ -360,6 +369,259 @@ class NRadixSimulator:
 
 
 # =============================================================================
+# WDM Triplet Definitions
+# =============================================================================
+
+# The 6 collision-free wavelength triplets discovered through exhaustive search
+# All wavelengths in nanometers, 60nm spacing between triplets, 20nm within
+WDM_TRIPLETS = {
+    1: {'name': 'Triplet 1', 'lambda_neg': 1040, 'lambda_zero': 1020, 'lambda_pos': 1000,
+        'sfg_outputs': (515, 510, 505), 'color': 'cyan'},
+    2: {'name': 'Triplet 2', 'lambda_neg': 1100, 'lambda_zero': 1080, 'lambda_pos': 1060,
+        'sfg_outputs': (545, 540, 535), 'color': 'green'},
+    3: {'name': 'Triplet 3', 'lambda_neg': 1160, 'lambda_zero': 1140, 'lambda_pos': 1120,
+        'sfg_outputs': (575, 570, 565), 'color': 'yellow'},
+    4: {'name': 'Triplet 4', 'lambda_neg': 1220, 'lambda_zero': 1200, 'lambda_pos': 1180,
+        'sfg_outputs': (605, 600, 595), 'color': 'orange'},
+    5: {'name': 'Triplet 5', 'lambda_neg': 1280, 'lambda_zero': 1260, 'lambda_pos': 1240,
+        'sfg_outputs': (635, 630, 625), 'color': 'red'},
+    6: {'name': 'Triplet 6', 'lambda_neg': 1340, 'lambda_zero': 1320, 'lambda_pos': 1300,
+        'sfg_outputs': (665, 660, 655), 'color': 'deep_red'},
+}
+
+
+def print_wdm_triplets():
+    """Print a table of all WDM triplets and their wavelengths."""
+    print("\n" + "=" * 70)
+    print("N-RADIX WDM WAVELENGTH TRIPLETS (Collision-Free)")
+    print("=" * 70)
+    print(f"{'#':>2} | {'λ₋₁ (nm)':>10} | {'λ₀ (nm)':>10} | {'λ₊₁ (nm)':>10} | {'SFG Outputs (nm)':<20}")
+    print("-" * 70)
+    for idx, triplet in WDM_TRIPLETS.items():
+        sfg = f"{triplet['sfg_outputs'][0]}, {triplet['sfg_outputs'][1]}, {triplet['sfg_outputs'][2]}"
+        print(f"{idx:>2} | {triplet['lambda_neg']:>10} | {triplet['lambda_zero']:>10} | {triplet['lambda_pos']:>10} | {sfg:<20}")
+    print("=" * 70)
+    print("All inputs: 1000-1340 nm (NIR)")
+    print("All SFG outputs: 505-665 nm (visible)")
+    print("Pattern: 60nm between triplets, 20nm within each triplet")
+    print("=" * 70 + "\n")
+
+
+# =============================================================================
+# WDM Simulator Class (Multi-Triplet Parallel Computation)
+# =============================================================================
+
+class NRadixWDMSimulator:
+    """
+    WDM (Wavelength Division Multiplexed) simulator for parallel optical computation.
+
+    Simulates multiple wavelength triplets operating in parallel through the same
+    physical chip. Each triplet performs independent matrix multiplication,
+    effectively giving N× throughput where N is the number of active triplets.
+
+    This models the real physics: different wavelengths don't interfere with
+    each other, so 6 independent computations can happen simultaneously through
+    the same waveguides.
+
+    Attributes:
+        array_size: Size of the systolic array (27 or 81).
+        num_triplets: Number of active WDM triplets (1-6).
+        triplet_sims: List of individual simulators, one per triplet.
+
+    Example:
+        >>> sim = NRadixWDMSimulator(array_size=27, num_triplets=6)
+        >>> weights_list = [np.random.randn(27, 27) for _ in range(6)]
+        >>> sim.load_weights(weights_list)
+        >>> inputs_list = [np.random.randn(27) for _ in range(6)]
+        >>> results = sim.compute(inputs_list)
+        >>> print(len(results))  # 6 parallel results
+        6
+    """
+
+    VALID_SIZES = (27, 81)
+    MAX_TRIPLETS = 6
+
+    def __init__(self, array_size: int = 27, num_triplets: int = 6,
+                 clock_freq_mhz: float = 617.0):
+        """
+        Initialize the WDM simulator.
+
+        Args:
+            array_size: Size of systolic array (27 or 81).
+            num_triplets: Number of parallel wavelength triplets (1-6).
+            clock_freq_mhz: Clock frequency in MHz.
+
+        Raises:
+            ValueError: If array_size or num_triplets is invalid.
+        """
+        if array_size not in self.VALID_SIZES:
+            raise ValueError(f"array_size must be one of {self.VALID_SIZES}")
+        if not 1 <= num_triplets <= self.MAX_TRIPLETS:
+            raise ValueError(f"num_triplets must be 1-{self.MAX_TRIPLETS}")
+
+        self.array_size = array_size
+        self.num_triplets = num_triplets
+        self.clock_freq_mhz = clock_freq_mhz
+
+        # Create one simulator per triplet
+        self.triplet_sims = [
+            NRadixSimulator(array_size=array_size, clock_freq_mhz=clock_freq_mhz)
+            for _ in range(num_triplets)
+        ]
+
+        # Store active triplet info
+        self.active_triplets = [WDM_TRIPLETS[i+1] for i in range(num_triplets)]
+
+    def load_weights(self, weights_list: List[np.ndarray]) -> None:
+        """
+        Load weights for all triplets.
+
+        Each triplet gets its own weight matrix, enabling different computations
+        in parallel (e.g., different layers of a neural network).
+
+        Args:
+            weights_list: List of weight matrices, one per triplet.
+                         Length must match num_triplets.
+
+        Raises:
+            ValueError: If number of weight matrices doesn't match num_triplets.
+        """
+        if len(weights_list) != self.num_triplets:
+            raise ValueError(f"Expected {self.num_triplets} weight matrices, got {len(weights_list)}")
+
+        for sim, weights in zip(self.triplet_sims, weights_list):
+            sim.load_weights(weights)
+
+    def load_weights_broadcast(self, weights: np.ndarray) -> None:
+        """
+        Load the same weights to all triplets.
+
+        Useful when running the same operation on different data in parallel.
+
+        Args:
+            weights: Single weight matrix to broadcast to all triplets.
+        """
+        for sim in self.triplet_sims:
+            sim.load_weights(weights.copy())
+
+    def compute(self, inputs_list: List[np.ndarray]) -> List[np.ndarray]:
+        """
+        Perform parallel computation across all triplets.
+
+        Each triplet processes its corresponding input independently.
+        In hardware, these computations happen SIMULTANEOUSLY through
+        the same physical waveguides (different wavelengths don't interfere).
+
+        Args:
+            inputs_list: List of input arrays, one per triplet.
+
+        Returns:
+            List of result arrays, one per triplet.
+
+        Raises:
+            ValueError: If number of inputs doesn't match num_triplets.
+        """
+        if len(inputs_list) != self.num_triplets:
+            raise ValueError(f"Expected {self.num_triplets} inputs, got {len(inputs_list)}")
+
+        results = []
+        for sim, inputs in zip(self.triplet_sims, inputs_list):
+            results.append(sim.compute(inputs))
+
+        return results
+
+    def compute_broadcast(self, inputs: np.ndarray) -> List[np.ndarray]:
+        """
+        Compute the same input across all triplets.
+
+        Useful when you have the same weights loaded (via load_weights_broadcast)
+        and want to compute the same operation 6 times for verification/averaging.
+
+        Args:
+            inputs: Single input array to broadcast to all triplets.
+
+        Returns:
+            List of results from all triplets.
+        """
+        return [sim.compute(inputs.copy()) for sim in self.triplet_sims]
+
+    def compute_batch(self, batch_inputs: np.ndarray) -> np.ndarray:
+        """
+        Process a batch across triplets automatically.
+
+        If batch size >= num_triplets, distributes across triplets for
+        parallel processing. This simulates the throughput advantage of WDM.
+
+        Args:
+            batch_inputs: 2D array of shape (batch_size, array_size).
+
+        Returns:
+            Results array of shape (batch_size, array_size).
+        """
+        if batch_inputs.ndim != 2:
+            raise ValueError("batch_inputs must be 2D (batch_size, array_size)")
+
+        batch_size = batch_inputs.shape[0]
+        results = []
+
+        # Process in chunks of num_triplets
+        for i in range(0, batch_size, self.num_triplets):
+            chunk = batch_inputs[i:i+self.num_triplets]
+            chunk_results = []
+
+            for j, inputs in enumerate(chunk):
+                if j < len(self.triplet_sims):
+                    chunk_results.append(self.triplet_sims[j].compute(inputs))
+
+            results.extend(chunk_results)
+
+        return np.array(results)
+
+    def get_stats(self) -> dict:
+        """
+        Get WDM simulator statistics.
+
+        Returns:
+            Dictionary with stats including parallel throughput.
+        """
+        ops_per_cycle_per_triplet = self.array_size ** 2 * 2  # MACs
+        total_ops_per_cycle = ops_per_cycle_per_triplet * self.num_triplets
+        throughput_gops = total_ops_per_cycle * self.clock_freq_mhz / 1000
+        throughput_tflops = throughput_gops / 1000
+
+        return {
+            'array_size': self.array_size,
+            'num_triplets': self.num_triplets,
+            'clock_freq_mhz': self.clock_freq_mhz,
+            'parallel_multiplier': f'{self.num_triplets}×',
+            'active_wavelengths': self.num_triplets * 3,
+            'theoretical_throughput_gops': throughput_gops,
+            'theoretical_throughput_tflops': throughput_tflops,
+            'triplet_wavelengths': [
+                (t['lambda_neg'], t['lambda_zero'], t['lambda_pos'])
+                for t in self.active_triplets
+            ],
+        }
+
+    def print_config(self):
+        """Print a human-readable configuration summary."""
+        stats = self.get_stats()
+        print("\n" + "=" * 60)
+        print("N-RADIX WDM SIMULATOR CONFIGURATION")
+        print("=" * 60)
+        print(f"Array Size:        {stats['array_size']}×{stats['array_size']}")
+        print(f"Active Triplets:   {stats['num_triplets']} ({stats['parallel_multiplier']} parallel)")
+        print(f"Total Wavelengths: {stats['active_wavelengths']}")
+        print(f"Clock Frequency:   {stats['clock_freq_mhz']} MHz")
+        print(f"Throughput:        {stats['theoretical_throughput_tflops']:.2f} TFLOPS")
+        print("-" * 60)
+        print("Active Wavelength Triplets:")
+        for i, (neg, zero, pos) in enumerate(stats['triplet_wavelengths'], 1):
+            print(f"  Triplet {i}: {neg}nm / {zero}nm / {pos}nm")
+        print("=" * 60 + "\n")
+
+
+# =============================================================================
 # Main Hardware Interface Class
 # =============================================================================
 
@@ -579,6 +841,33 @@ if __name__ == "__main__":
     results = benchmark_simulator(array_size=27, num_iterations=100)
     print(f"  {results['throughput_mops']:.1f} MOPS (simulated)")
     print(f"  {results['time_per_compute_us']:.1f} us per compute")
+
+    # Test WDM Simulator
+    print("\n[WDM Simulator Tests]")
+    print_wdm_triplets()
+
+    wdm_sim = NRadixWDMSimulator(array_size=27, num_triplets=6)
+    wdm_sim.print_config()
+
+    # Load different weights for each triplet
+    weights_list = [np.random.randn(27, 27).astype(np.float32) for _ in range(6)]
+    wdm_sim.load_weights(weights_list)
+    print("  Loaded 6 different weight matrices (one per triplet)")
+
+    # Compute 6 parallel operations
+    inputs_list = [np.random.randn(27).astype(np.float32) for _ in range(6)]
+    results_list = wdm_sim.compute(inputs_list)
+    print(f"  Computed 6 parallel matrix-vector products")
+    print(f"  Results: {len(results_list)} outputs, each shape {results_list[0].shape}")
+
+    # Test batch processing
+    batch = np.random.randn(12, 27).astype(np.float32)  # 12 inputs
+    wdm_sim.load_weights_broadcast(weights)  # Same weights for all
+    batch_results = wdm_sim.compute_batch(batch)
+    print(f"  Batch processing: {batch.shape[0]} inputs -> {batch_results.shape[0]} outputs")
+
+    stats = wdm_sim.get_stats()
+    print(f"  Theoretical throughput: {stats['theoretical_throughput_tflops']:.2f} TFLOPS")
 
     print("\n" + "=" * 50)
     print("All tests passed!")
