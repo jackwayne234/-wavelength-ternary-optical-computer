@@ -44,33 +44,22 @@ The optical approach eliminates the heat and power constraints that limit electr
 The optical TPU uses a **systolic array** architecture - the same fundamental design as Google's TPUs and NVIDIA's tensor cores. Data flows through a grid of Processing Elements (PEs), with each PE performing multiply-accumulate operations as data passes through.
 
 ```
+        Weight inputs (stationary in PEs)
+                    ↓
         ┌───────────────────────────────────────┐
-        │           ROUND TABLE                 │
-        │    (Central Kerr Clock @ 617 MHz)     │
-        │                                       │
         │     PE─PE─PE─PE─PE─PE─PE─PE─PE       │
    A →  │     PE─PE─PE─PE─PE─PE─PE─PE─PE  → C  │
-   i    │     PE─PE─PE─PE─PE─PE─PE─PE─PE       │
-   n    │     PE─PE─PE─PE─PE─PE─PE─PE─PE       │
-   p    │     PE─PE─PE─PE─PE─PE─PE─PE─PE       │
-   u    │     PE─PE─PE─PE─PE─PE─PE─PE─PE       │
+   c    │     PE─PE─PE─PE─PE─PE─PE─PE─PE       │
    t    │     PE─PE─PE─PE─PE─PE─PE─PE─PE       │
-   s    │     PE─PE─PE─PE─PE─PE─PE─PE─PE       │
-        │     PE─PE─PE─PE─PE─PE─PE─PE─PE       │
-        │                 ↓                     │
-        │              B inputs                 │
-        └───────────────────────────────────────┘
+   i    │     PE─PE─PE─PE─PE─PE─PE─PE─PE       │
+   v    │     PE─PE─PE─PE─PE─PE─PE─PE─PE       │
+   a    │     PE─PE─PE─PE─PE─PE─PE─PE─PE       │
+   t    │     PE─PE─PE─PE─PE─PE─PE─PE─PE       │
+   i    │     PE─PE─PE─PE─PE─PE─PE─PE─PE       │
+   o    │                 ↓                     │
+   n    │         Accumulated outputs          │
+   s    └───────────────────────────────────────┘
 ```
-
-### The Round Table Topology
-
-The optical TPU uses a **Round Table** architecture:
-
-- **Central Kerr Clock**: 617 MHz optical clock at the exact center
-- **Equidistant Components**: All processing elements are equidistant from the clock via H-tree routing, ensuring synchronous operation across the entire array
-- **Modular Scaling**: Each Round Table supports configurations from 27x27 up to 960x960 PEs
-
-**Why "Round Table"?** Like King Arthur's knights, no PE is closer to the center than another. This eliminates clock skew - the nemesis of large-scale synchronous systems.
 
 ### Data Flow
 
@@ -294,6 +283,30 @@ While the TPU architecture is optimized for matrix operations, a general-purpose
 - **Cache hierarchy** - Optical memory is still an open research problem
 
 The CPU path is preserved here because some applications (embedded systems, specialized controllers) might benefit from ternary logic without needing TPU-scale parallelism.
+
+### The Round Table Topology (Multi-CPU Configuration)
+
+For systems requiring multiple CPUs sharing a common clock, we use a **Round Table** architecture:
+
+```
+                           CPU₀
+                            │
+               CPU₇ ────────┼──────── CPU₁
+                     \      │      /
+                      \  ┌─────┐  /
+               CPU₆ ───│ KERR │─── CPU₂
+                      /  │617MHz│  \
+                     /   └─────┘   \
+               CPU₅ ────────┼──────── CPU₃
+                            │
+                           CPU₄
+```
+
+- **Central Kerr Clock**: 617 MHz optical clock at the exact center
+- **Equidistant Components**: All CPUs are equidistant from the clock, ensuring synchronous operation
+- **Modular Scaling**: 1-8 CPUs per Round Table, each with its own IOC/IOA
+
+**Why "Round Table"?** Like King Arthur's knights, no CPU is closer to the center than another. This eliminates clock skew when coordinating multiple processors.
 
 ### Repository Structure (Research/programs/)
 
