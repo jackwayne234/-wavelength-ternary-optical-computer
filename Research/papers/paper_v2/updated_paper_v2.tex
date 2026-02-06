@@ -503,7 +503,7 @@ For high-assurance applications—cryptographic key storage, secure enclaves, cr
 We have presented the N-Radix architecture, extending wavelength-division ternary logic into a practical AI accelerator design. Key contributions include:
 
 \begin{enumerate}
-\item \textbf{Systolic array architecture}: Identical topology to proven designs (Google TPU, NVIDIA tensor cores), but with optical ternary PEs
+\item \textbf{Systolic array architecture}: Based on Kung and Leiserson's foundational systolic design, implemented with optical ternary PEs
 \item \textbf{Log-domain tower scaling}: 3\textsuperscript{3} encoding yields 9$\times$ throughput for pure ADD operations, $\sim$1.8$\times$ for matrix multiply (via Amdahl's Law on the 50/50 ADD/MUL split)
 \item \textbf{Practical limits identified}: 3\textsuperscript{3}\textsuperscript{3}\textsuperscript{3} requires 12 terabit registers—beyond physical realizability
 \item \textbf{64-bit hardware as the true ceiling}: The optical hardware is unlimited; 64-bit hardware can handle 3\textsuperscript{3} encoding but not higher towers
@@ -520,6 +520,10 @@ The architecture offers a path to supercomputer-class performance in dramaticall
 \end{itemize}
 
 Even the conservative matrix multiply numbers represent a transformative improvement: 8 chips at less than 0.02\% the power vs.\ Frontier's 9,402 nodes. The fundamental physics allows it; the engineering challenge is now clearly defined.
+
+\subsection*{Ongoing Work}
+
+The weight streaming architecture described in this paper relies on a 3-tier optical RAM hierarchy. While the architecture is defined, validation of weight storage mechanisms and streaming integration with the systolic array is currently in progress. Results will be presented in subsequent work.
 
 \section*{Acknowledgment}
 
