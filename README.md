@@ -172,7 +172,21 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
 ## Citation
 
-### Paper (Theory)
+### Paper v2 (Architecture)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18501296.svg)](https://doi.org/10.5281/zenodo.18501296)
+
+```bibtex
+@misc{riner2026nradix,
+  author = {Riner, Christopher},
+  title = {Wavelength-Division Ternary Computing II: The N-Radix Optical AI Accelerator},
+  year = {2026},
+  publisher = {Zenodo},
+  doi = {10.5281/zenodo.18501296},
+  url = {https://doi.org/10.5281/zenodo.18501296}
+}
+```
+
+### Paper v1 (Theory)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18437600.svg)](https://doi.org/10.5281/zenodo.18437600)
 
 ```bibtex
