@@ -1,19 +1,61 @@
 #!/usr/bin/env python3
 """
-Super IOC Module for Optical Systolic Array
+Super NR-IOC Module for Optical Systolic Array
 
-Enhanced Input/Output Converter that replaces traditional RAM architecture:
-- Weight Loader: Loads 6,561 weights into 81×81 PE array
-- Activation Streamer: 81-channel parallel input @ 617 MHz
-- Result Collector: 81-channel parallel output with accumulation
-- Double Buffer: Ping-pong buffers eliminate RAM bottleneck
-- Format Converters: Trit ↔ Binary conversion
+Enhanced Input/Output Converter serving as the HOST INTERFACE for the optical system.
+
+=============================================================================
+NEW ARCHITECTURE: OPTICAL RAM WEIGHT STREAMING
+=============================================================================
+
+Key insight: Weights are stored in the CPU's 3-tier optical RAM system and
+STREAMED to the PE array through this NR-IOC module. This eliminates the need
+for per-PE weight storage and keeps data in the optical domain throughout.
+
+Data Flow:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│   HOST (Electronic)                                                         │
+│      │                                                                       │
+│      │ PCIe/USB (binary data)                                               │
+│      ▼                                                                       │
+│   ┌──────────────────┐                                                      │
+│   │     NR-IOC       │  ◄── THIS MODULE                                    │
+│   │  (Host Interface)│      - Electronic-to-optical conversion             │
+│   │                  │      - Format conversion (binary → ternary)         │
+│   │                  │      - Timing/clock synchronization                  │
+│   └────────┬─────────┘                                                      │
+│            │                                                                 │
+│            │ OPTICAL (stays optical from here)                              │
+│            ▼                                                                 │
+│   ┌──────────────────┐                                                      │
+│   │   CPU OPTICAL    │  ◄── Weight storage lives HERE                      │
+│   │   RAM (3-tier)   │      - L1: Ring resonator cache                     │
+│   │                  │      - L2: Delay line buffer                         │
+│   │                  │      - L3: Large optical storage                     │
+│   └────────┬─────────┘                                                      │
+│            │                                                                 │
+│            │ OPTICAL (weights stream out)                                   │
+│            ▼                                                                 │
+│   ┌──────────────────┐                                                      │
+│   │  PE ARRAY        │  ◄── Weights arrive optically, compute optically   │
+│   │  (81×81)         │      No E/O conversion for weights!                 │
+│   └──────────────────┘                                                      │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Why this matters:
+1. Weights stay OPTICAL from RAM through compute - no E/O/E conversion penalty
+2. NR-IOC only converts at HOST BOUNDARY (once, not per-PE)
+3. CPU's existing 3-tier RAM becomes weight storage (no new memory needed)
+4. Streaming enables arbitrary model sizes (not limited by PE storage)
+
+Module components:
+- Weight Serializer: Reads from optical RAM, serializes for distribution tree
+- Weight Distribution Tree: Broadcasts optical weights to PE columns
+- Activation Streamer: 81-channel parallel input @ 617 MHz (from host)
+- Result Collector: 81-channel parallel output with accumulation (to host)
 - Clock Interface: Kerr resonator 617 MHz distribution
-
-Eliminates need for separate RAM tiers by:
-1. Weights stored IN the PE array (bistable registers)
-2. Activations streamed through double buffers
-3. Results collected and formatted on-the-fly
 
 Throughput: 50 Gtrits/s input, 50 Gtrits/s output
 Latency: ~160 ns (array propagation) + ~10 ns (IOC overhead)
@@ -78,46 +120,93 @@ def _uid() -> str:
 @gf.cell
 def weight_serializer() -> Component:
     """
-    Converts parallel weight data to serial stream for loading.
+    Optical Weight Serializer - Reads from CPU's Optical RAM
 
-    Input: 81-bit parallel (from host)
-    Output: Serial stream @ 617 MHz
+    NEW ARCHITECTURE: This component interfaces with the CPU's 3-tier optical
+    RAM system to read weights and serialize them for distribution to PEs.
+
+    Key design principle: Weights stay OPTICAL throughout.
+    - Input: Optical signal from CPU's RAM (not electronic!)
+    - Output: Serialized optical stream @ 617 MHz
+
+    The serializer:
+    1. Receives optical weight data from CPU's L1/L2/L3 optical RAM
+    2. Buffers in optical delay lines (ring resonators)
+    3. Serializes via time-division multiplexing
+    4. Outputs timed pulses synchronized to Kerr clock
+
+    This is NOT an E/O converter - it's an optical-to-optical formatter.
+    E/O conversion only happens at the host boundary (in the NR-IOC host interface).
     """
     c = gf.Component()
 
-    width = 150
-    height = 80
+    width = 200
+    height = 120
 
     # Main block
     c.add_polygon([(0, 0), (width, 0), (width, height), (0, height)], layer=LAYER_SERIAL)
 
-    # Parallel input pads (simplified as bus)
-    c.add_polygon([(-20, height/2-15), (0, height/2-15),
-                   (0, height/2+15), (-20, height/2+15)], layer=LAYER_METAL_PAD)
-    c.add_label("PAR_IN[80:0]", position=(-30, height/2), layer=LAYER_TEXT)
+    # ==========================================================================
+    # OPTICAL INPUT from CPU RAM (NOT electronic!)
+    # ==========================================================================
 
-    # Serial output
+    # Optical input bus from CPU's optical RAM
+    c.add_polygon([(-30, height/2-10), (0, height/2-10),
+                   (0, height/2+10), (-30, height/2+10)], layer=LAYER_WAVEGUIDE)
+    c.add_label("FROM CPU", position=(-45, height/2+15), layer=LAYER_TEXT)
+    c.add_label("OPT RAM", position=(-45, height/2-5), layer=LAYER_TEXT)
+
+    # ==========================================================================
+    # Internal optical buffer (ring resonators for timing)
+    # ==========================================================================
+
+    # Ring resonator buffer array (holds optical data for serialization)
+    for i in range(4):
+        x = 30 + i * 35
+        y = height/2
+        # Small ring resonator
+        c.add_polygon([(x, y-12), (x+25, y-12), (x+25, y+12), (x, y+12)], layer=LAYER_CARRY)
+        c.add_label(f"R{i}", position=(x+12, y), layer=LAYER_TEXT)
+
+    c.add_label("OPTICAL BUFFER", position=(width/2, height - 20), layer=LAYER_TEXT)
+    c.add_label("(Ring Resonators)", position=(width/2, height - 35), layer=LAYER_TEXT)
+
+    # ==========================================================================
+    # Serialized optical output
+    # ==========================================================================
+
+    # Serial output (optical waveguide)
     c.add_polygon([(width, height/2-2), (width+30, height/2-2),
                    (width+30, height/2+2), (width, height/2+2)], layer=LAYER_WAVEGUIDE)
+    c.add_label("SER OUT", position=(width+45, height/2), layer=LAYER_TEXT)
 
-    # Clock input
+    # Clock input (for timing synchronization)
     c.add_polygon([(width/2-10, -15), (width/2+10, -15),
                    (width/2+10, 0), (width/2-10, 0)], layer=LAYER_CLOCK)
     c.add_label("CLK", position=(width/2, -25), layer=LAYER_TEXT)
 
-    # Load signal
-    c.add_polygon([(width-30, height), (width-10, height),
-                   (width-10, height+15), (width-30, height+15)], layer=LAYER_METAL_PAD)
-    c.add_label("LOAD", position=(width-20, height+25), layer=LAYER_TEXT)
+    # Read address (from controller - which RAM address to read)
+    c.add_polygon([(width-40, height), (width-10, height),
+                   (width-10, height+15), (width-40, height+15)], layer=LAYER_METAL_PAD)
+    c.add_label("ADDR", position=(width-25, height+25), layer=LAYER_TEXT)
 
-    c.add_label("WEIGHT", position=(width/2, height/2+10), layer=LAYER_TEXT)
-    c.add_label("SERIALIZER", position=(width/2, height/2-10), layer=LAYER_TEXT)
+    # Labels
+    c.add_label("WEIGHT", position=(width/2, 30), layer=LAYER_TEXT)
+    c.add_label("SERIALIZER", position=(width/2, 15), layer=LAYER_TEXT)
+    c.add_label("(Optical Domain)", position=(width/2, 0), layer=LAYER_TEXT)
 
+    # ==========================================================================
     # Ports
-    c.add_port("par_in", center=(-10, height/2), width=30, orientation=180, layer=LAYER_METAL_PAD)
+    # ==========================================================================
+
+    # Optical input from CPU RAM (this is the key change!)
+    c.add_port("opt_ram_in", center=(-30, height/2), width=20, orientation=180, layer=LAYER_WAVEGUIDE)
+    # Serialized optical output
     c.add_port("ser_out", center=(width+30, height/2), width=WAVEGUIDE_WIDTH, orientation=0, layer=LAYER_WAVEGUIDE)
+    # Clock
     c.add_port("clk", center=(width/2, -7.5), width=20, orientation=270, layer=LAYER_CLOCK)
-    c.add_port("load", center=(width-20, height+7.5), width=20, orientation=90, layer=LAYER_METAL_PAD)
+    # Address control (electronic - tells which weight to read)
+    c.add_port("addr", center=(width-25, height+7.5), width=30, orientation=90, layer=LAYER_METAL_PAD)
 
     return c
 
@@ -125,48 +214,117 @@ def weight_serializer() -> Component:
 @gf.cell
 def weight_distribution_tree(n_outputs: int = 81) -> Component:
     """
-    1-to-N optical splitter tree for distributing weights to columns.
+    Optical Weight Distribution Tree - Broadcasts from CPU RAM to PE Array
 
-    Uses cascaded Y-junctions for equal power splitting.
+    NEW ARCHITECTURE: This tree distributes OPTICAL weights from the CPU's
+    optical RAM to the PE array columns. The weights never leave the optical
+    domain between RAM and compute.
+
+    Data flow:
+    ┌─────────────────────────────────────────────────────────────────┐
+    │  CPU Optical RAM                                                 │
+    │       │                                                          │
+    │       │ (optical waveguide)                                     │
+    │       ▼                                                          │
+    │  Weight Serializer                                              │
+    │       │                                                          │
+    │       │ (serialized optical stream)                             │
+    │       ▼                                                          │
+    │  ┌─────────────────────────────────────┐                        │
+    │  │   WEIGHT DISTRIBUTION TREE          │ ◄── THIS COMPONENT    │
+    │  │   (1-to-81 optical splitter)        │                        │
+    │  │                                     │                        │
+    │  │   Input: Single optical stream      │                        │
+    │  │   Output: 81 synchronized copies    │                        │
+    │  │                                     │                        │
+    │  │   Uses cascaded Y-junctions with    │                        │
+    │  │   SOAs for loss compensation        │                        │
+    │  └──────────────┬──────────────────────┘                        │
+    │                 │                                                │
+    │     ┌───────────┼───────────┐                                   │
+    │     ▼           ▼           ▼                                   │
+    │   Col 0       Col 1  ...  Col 80                                │
+    │     │           │           │                                    │
+    │     ▼           ▼           ▼                                    │
+    │   PE Array (weights arrive optically!)                          │
+    └─────────────────────────────────────────────────────────────────┘
+
+    Key insight: By keeping weights optical from RAM through distribution,
+    we eliminate 81 E/O conversions per weight. The only E/O conversion
+    happens once at the host boundary when weights first enter the system.
+
+    Uses cascaded Y-junctions for equal power splitting, with SOAs
+    at each stage to compensate for splitting losses.
     """
     c = gf.Component()
 
-    # Calculate tree depth
+    # Calculate tree depth (log2 for binary splitting)
     depth = int(np.ceil(np.log2(n_outputs)))
 
     stage_width = 50
-    total_width = depth * stage_width + 50
+    total_width = depth * stage_width + 80  # Extra space for labels
     total_height = n_outputs * 5
 
-    # Tree structure (simplified representation)
-    c.add_polygon([(0, total_height/2 - 20), (total_width, total_height/2 - 20),
-                   (total_width, total_height/2 + 20), (0, total_height/2 + 20)], layer=LAYER_BUS)
+    # ==========================================================================
+    # Tree structure visualization
+    # ==========================================================================
 
-    # Input
-    c.add_polygon([(-20, total_height/2 - WAVEGUIDE_WIDTH/2), (0, total_height/2 - WAVEGUIDE_WIDTH/2),
-                   (0, total_height/2 + WAVEGUIDE_WIDTH/2), (-20, total_height/2 + WAVEGUIDE_WIDTH/2)],
+    # Main tree body
+    c.add_polygon([(0, total_height/2 - 25), (total_width - 30, total_height/2 - 25),
+                   (total_width - 30, total_height/2 + 25), (0, total_height/2 + 25)], layer=LAYER_BUS)
+
+    # ==========================================================================
+    # OPTICAL INPUT (from CPU RAM via serializer)
+    # ==========================================================================
+
+    # Input waveguide (optical - from weight serializer which reads CPU RAM)
+    c.add_polygon([(-30, total_height/2 - WAVEGUIDE_WIDTH/2), (0, total_height/2 - WAVEGUIDE_WIDTH/2),
+                   (0, total_height/2 + WAVEGUIDE_WIDTH/2), (-30, total_height/2 + WAVEGUIDE_WIDTH/2)],
                   layer=LAYER_WAVEGUIDE)
+    c.add_label("FROM", position=(-45, total_height/2 + 12), layer=LAYER_TEXT)
+    c.add_label("OPT RAM", position=(-45, total_height/2 - 8), layer=LAYER_TEXT)
 
-    # Output waveguides
+    # ==========================================================================
+    # Output waveguides to PE columns (all optical!)
+    # ==========================================================================
+
     output_spacing = total_height / n_outputs
     for i in range(n_outputs):
         y = output_spacing * (i + 0.5)
-        c.add_polygon([(total_width, y - WAVEGUIDE_WIDTH/2), (total_width + 15, y - WAVEGUIDE_WIDTH/2),
-                       (total_width + 15, y + WAVEGUIDE_WIDTH/2), (total_width, y + WAVEGUIDE_WIDTH/2)],
+        c.add_polygon([(total_width - 30, y - WAVEGUIDE_WIDTH/2), (total_width + 15, y - WAVEGUIDE_WIDTH/2),
+                       (total_width + 15, y + WAVEGUIDE_WIDTH/2), (total_width - 30, y + WAVEGUIDE_WIDTH/2)],
                       layer=LAYER_WAVEGUIDE)
         c.add_port(f"out_{i}", center=(total_width + 15, y), width=WAVEGUIDE_WIDTH,
                    orientation=0, layer=LAYER_WAVEGUIDE)
 
-    # SOAs for loss compensation
+    # Label outputs
+    c.add_label("TO PE", position=(total_width + 30, total_height/2 + 20), layer=LAYER_TEXT)
+    c.add_label("COLS", position=(total_width + 30, total_height/2), layer=LAYER_TEXT)
+    c.add_label("[0:80]", position=(total_width + 30, total_height/2 - 20), layer=LAYER_TEXT)
+
+    # ==========================================================================
+    # SOAs for loss compensation (critical for maintaining signal integrity)
+    # ==========================================================================
+
     for stage in range(depth):
         x = stage * stage_width + 25
         c.add_polygon([(x, total_height/2 - 15), (x + 20, total_height/2 - 15),
                        (x + 20, total_height/2 + 15), (x, total_height/2 + 15)], layer=LAYER_EXP)
         c.add_label("SOA", position=(x + 10, total_height/2), layer=LAYER_TEXT)
 
-    c.add_label(f"1:{n_outputs} TREE", position=(total_width/2, total_height/2 + 30), layer=LAYER_TEXT)
+    # ==========================================================================
+    # Labels
+    # ==========================================================================
 
-    c.add_port("in", center=(-20, total_height/2), width=WAVEGUIDE_WIDTH, orientation=180, layer=LAYER_WAVEGUIDE)
+    c.add_label(f"OPTICAL 1:{n_outputs} DISTRIBUTION TREE", position=(total_width/2 - 15, total_height/2 + 40), layer=LAYER_TEXT)
+    c.add_label("(Weights from CPU RAM → PE Array)", position=(total_width/2 - 15, total_height/2 - 40), layer=LAYER_TEXT)
+
+    # ==========================================================================
+    # Ports
+    # ==========================================================================
+
+    # Optical input from weight serializer (which reads CPU optical RAM)
+    c.add_port("opt_in", center=(-30, total_height/2), width=WAVEGUIDE_WIDTH, orientation=180, layer=LAYER_WAVEGUIDE)
 
     return c
 
@@ -174,68 +332,144 @@ def weight_distribution_tree(n_outputs: int = 81) -> Component:
 @gf.cell
 def weight_loader_unit() -> Component:
     """
-    Complete weight loading unit for 81×81 array.
+    Weight Streaming Unit - Streams from CPU Optical RAM to PE Array
 
-    Loads 6,561 weights (81 columns × 81 rows × 9 trits each).
-    Total: 59,049 trits
+    NEW ARCHITECTURE: This unit streams weights FROM the CPU's optical RAM
+    TO the PE array. Weights stay optical throughout - no per-PE storage needed.
 
-    Loading time @ 617 MHz: ~96 μs (one-time cost)
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │                     WEIGHT STREAMING UNIT                                │
+    │                                                                          │
+    │   ┌────────────────┐                                                    │
+    │   │  CPU OPTICAL   │  ◄── Weights stored here (3-tier optical RAM)     │
+    │   │  RAM INTERFACE │      - Already optical, no conversion needed       │
+    │   │                │      - L1/L2/L3 hierarchy for speed/capacity       │
+    │   └───────┬────────┘                                                    │
+    │           │ optical                                                      │
+    │           ▼                                                              │
+    │   ┌────────────────┐                                                    │
+    │   │ WEIGHT         │  ◄── Reads optical weights, serializes timing     │
+    │   │ SERIALIZER     │                                                    │
+    │   └───────┬────────┘                                                    │
+    │           │ optical                                                      │
+    │           ▼                                                              │
+    │   ┌────────────────┐      ┌──────┐                                      │
+    │   │ DISTRIBUTION   │──────│ Col 0│──► PE[0,*]                           │
+    │   │ TREE           │──────│ Col 1│──► PE[1,*]                           │
+    │   │ (1:81 optical) │ ...  │ ...  │                                      │
+    │   │                │──────│Col 80│──► PE[80,*]                          │
+    │   └────────────────┘      └──────┘                                      │
+    │                                                                          │
+    │   Key: All arrows are OPTICAL waveguides, not electrical!               │
+    └─────────────────────────────────────────────────────────────────────────┘
+
+    Streaming model:
+    - Weights stream continuously from optical RAM
+    - Each PE receives its weight at the right time (pipelined)
+    - No need to "load" weights - they're always flowing
+    - Arbitrary model size supported (not limited by PE registers)
+
+    Streaming time @ 617 MHz for 6,561 weights × 9 trits = ~96 μs per full refresh
     """
     c = gf.Component()
 
-    width = 800
-    height = 600
+    width = 900
+    height = 700
 
     # Background
     c.add_polygon([(0, 0), (width, 0), (width, height), (0, height)], layer=LAYER_BUS)
 
+    # ==========================================================================
     # Title
-    c.add_label("WEIGHT LOADER UNIT", position=(width/2, height - 20), layer=LAYER_TEXT)
-    c.add_label("6,561 weights × 9 trits = 59,049 trits", position=(width/2, height - 40), layer=LAYER_TEXT)
+    # ==========================================================================
 
-    # Host interface (left side)
-    c.add_polygon([(20, height/2 - 100), (120, height/2 - 100),
-                   (120, height/2 + 100), (20, height/2 + 100)], layer=LAYER_DMA)
-    c.add_label("HOST", position=(70, height/2 + 20), layer=LAYER_TEXT)
-    c.add_label("DMA", position=(70, height/2 - 20), layer=LAYER_TEXT)
-    c.add_label("INTERFACE", position=(70, height/2 - 40), layer=LAYER_TEXT)
+    c.add_label("WEIGHT STREAMING UNIT", position=(width/2, height - 20), layer=LAYER_TEXT)
+    c.add_label("Optical RAM → PE Array (all optical)", position=(width/2, height - 45), layer=LAYER_TEXT)
 
-    # Weight serializer
+    # ==========================================================================
+    # CPU Optical RAM Interface (left side) - THIS IS THE KEY CHANGE
+    # ==========================================================================
+
+    c.add_polygon([(20, height/2 - 120), (150, height/2 - 120),
+                   (150, height/2 + 120), (20, height/2 + 120)], layer=LAYER_CARRY)
+    c.add_label("CPU", position=(85, height/2 + 80), layer=LAYER_TEXT)
+    c.add_label("OPTICAL", position=(85, height/2 + 50), layer=LAYER_TEXT)
+    c.add_label("RAM", position=(85, height/2 + 20), layer=LAYER_TEXT)
+    c.add_label("INTERFACE", position=(85, height/2 - 10), layer=LAYER_TEXT)
+
+    # Show the 3-tier hierarchy
+    c.add_polygon([(30, height/2 - 100), (140, height/2 - 100),
+                   (140, height/2 - 60), (30, height/2 - 60)], layer=LAYER_BUFFER)
+    c.add_label("L1: Ring", position=(85, height/2 - 80), layer=LAYER_TEXT)
+
+    c.add_polygon([(30, height/2 - 55), (140, height/2 - 55),
+                   (140, height/2 - 15), (30, height/2 - 15)], layer=LAYER_BUFFER)
+    c.add_label("L2: Delay", position=(85, height/2 - 35), layer=LAYER_TEXT)
+
+    # Optical waveguide from RAM (NOT electronic!)
+    c.add_polygon([(150, height/2 - 5), (180, height/2 - 5),
+                   (180, height/2 + 5), (150, height/2 + 5)], layer=LAYER_WAVEGUIDE)
+    c.add_label("OPT", position=(165, height/2 + 20), layer=LAYER_TEXT)
+
+    # ==========================================================================
+    # Weight serializer (now reads optical, not electronic)
+    # ==========================================================================
+
     serializer = c << weight_serializer()
-    serializer.dmove((180, height/2 - 40))
+    serializer.dmove((200, height/2 - 60))
 
-    # Distribution tree
+    # ==========================================================================
+    # Distribution tree (optical broadcast to all columns)
+    # ==========================================================================
+
     tree = c << weight_distribution_tree(n_outputs=81)
-    tree.dmove((400, height/2 - 200))
+    tree.dmove((480, height/2 - 200))
 
-    # Row address decoder
-    c.add_polygon([(350, 50), (450, 50), (450, 150), (350, 150)], layer=LAYER_MUX)
-    c.add_label("ROW", position=(400, 110), layer=LAYER_TEXT)
-    c.add_label("ADDR", position=(400, 90), layer=LAYER_TEXT)
-    c.add_label("[6:0]", position=(400, 70), layer=LAYER_TEXT)
+    # ==========================================================================
+    # Address/control logic (electronic - just coordinates, not data)
+    # ==========================================================================
 
-    # Control logic block
-    c.add_polygon([(200, 50), (320, 50), (320, 130), (200, 130)], layer=LAYER_METAL_PAD)
-    c.add_label("LOAD", position=(260, 100), layer=LAYER_TEXT)
-    c.add_label("CTRL", position=(260, 70), layer=LAYER_TEXT)
+    c.add_polygon([(200, 80), (350, 80), (350, 180), (200, 180)], layer=LAYER_METAL_PAD)
+    c.add_label("ADDRESS", position=(275, 150), layer=LAYER_TEXT)
+    c.add_label("GENERATOR", position=(275, 120), layer=LAYER_TEXT)
+    c.add_label("(Electronic)", position=(275, 95), layer=LAYER_TEXT)
+
+    # Row sequencer
+    c.add_polygon([(380, 80), (480, 80), (480, 160), (380, 160)], layer=LAYER_MUX)
+    c.add_label("ROW", position=(430, 135), layer=LAYER_TEXT)
+    c.add_label("SEQ", position=(430, 105), layer=LAYER_TEXT)
 
     # Status indicators
-    c.add_polygon([(650, 50), (750, 50), (750, 100), (650, 100)], layer=LAYER_METAL_PAD)
-    c.add_label("STATUS", position=(700, 85), layer=LAYER_TEXT)
-    c.add_label("BUSY/DONE", position=(700, 60), layer=LAYER_TEXT)
+    c.add_polygon([(750, 80), (870, 80), (870, 140), (750, 140)], layer=LAYER_METAL_PAD)
+    c.add_label("STREAM", position=(810, 120), layer=LAYER_TEXT)
+    c.add_label("STATUS", position=(810, 95), layer=LAYER_TEXT)
 
+    # ==========================================================================
+    # Documentation box explaining the architecture
+    # ==========================================================================
+
+    c.add_polygon([(20, 20), (350, 20), (350, 70), (20, 70)], layer=LAYER_METAL_PAD)
+    c.add_label("Note: Data path is ALL OPTICAL", position=(185, 55), layer=LAYER_TEXT)
+    c.add_label("Only control signals are electronic", position=(185, 35), layer=LAYER_TEXT)
+
+    # ==========================================================================
     # Ports
-    c.add_port("host_data", center=(0, height/2), width=100, orientation=180, layer=LAYER_DMA)
-    c.add_port("host_ctrl", center=(0, height/2 - 150), width=50, orientation=180, layer=LAYER_METAL_PAD)
+    # ==========================================================================
 
-    # Weight outputs to array (right side)
+    # Optical input from CPU RAM (this replaces the old electronic host_data)
+    c.add_port("cpu_ram_optical", center=(0, height/2), width=20, orientation=180, layer=LAYER_WAVEGUIDE)
+
+    # Electronic control (addresses, not data)
+    c.add_port("ctrl", center=(0, height/2 - 180), width=50, orientation=180, layer=LAYER_METAL_PAD)
+
+    # Weight outputs to array (right side) - all optical
     for i in range(81):
-        y = 100 + i * 5
+        y = 120 + i * 5
         c.add_port(f"weight_col_{i}", center=(width, y), width=WAVEGUIDE_WIDTH,
                    orientation=0, layer=LAYER_WAVEGUIDE)
 
     c.add_port("clk_in", center=(width/2, 0), width=20, orientation=270, layer=LAYER_CLOCK)
-    c.add_port("status", center=(700, 0), width=50, orientation=270, layer=LAYER_METAL_PAD)
+    c.add_port("status", center=(810, 0), width=50, orientation=270, layer=LAYER_METAL_PAD)
 
     return c
 
@@ -721,39 +955,67 @@ def clock_distribution_hub() -> Component:
 @gf.cell
 def super_ioc_module() -> Component:
     """
-    Complete Super IOC Module for 81×81 Optical Systolic Array.
+    Complete Super NR-IOC Module for 81×81 Optical Systolic Array.
 
-    Replaces traditional RAM architecture with:
-    ┌─────────────────────────────────────────────────────────────────┐
-    │                        SUPER IOC                                 │
-    ├─────────────────────────────────────────────────────────────────┤
-    │                                                                  │
-    │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
-    │  │   WEIGHT     │  │  ACTIVATION  │  │   RESULT     │          │
-    │  │   LOADER     │  │  STREAMER    │  │  COLLECTOR   │          │
-    │  │              │  │              │  │              │          │
-    │  │  6561 wts    │  │  81-ch @617M │  │  81-ch @617M │          │
-    │  │  ~96μs load  │  │  double-buf  │  │  accumulate  │          │
-    │  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘          │
-    │         │                 │                 │                   │
-    │         └────────────┬────┴────────────────┘                   │
-    │                      │                                          │
-    │              ┌───────┴───────┐                                  │
-    │              │  CLOCK HUB    │                                  │
-    │              │   617 MHz     │                                  │
-    │              │  (from Kerr)  │                                  │
-    │              └───────────────┘                                  │
-    │                                                                  │
-    │         TO/FROM 81×81 SYSTOLIC ARRAY                           │
-    │                                                                  │
-    └─────────────────────────────────────────────────────────────────┘
+    This module serves as the HOST INTERFACE - the boundary between the
+    electronic host system and the all-optical compute fabric.
+
+    ==========================================================================
+    NEW ARCHITECTURE: Optical RAM Weight Streaming
+    ==========================================================================
+
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │                        SUPER NR-IOC                                      │
+    │                    (Host Interface Module)                               │
+    ├─────────────────────────────────────────────────────────────────────────┤
+    │                                                                          │
+    │  HOST (Electronic) ──────► E/O CONVERSION ──────► OPTICAL DOMAIN        │
+    │                              (happens ONCE)                              │
+    │                                                                          │
+    │  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐            │
+    │  │ WEIGHT         │  │  ACTIVATION    │  │   RESULT       │            │
+    │  │ STREAMING      │  │  STREAMER      │  │   COLLECTOR    │            │
+    │  │                │  │                │  │                │            │
+    │  │ FROM: CPU      │  │  81-ch @617M   │  │  81-ch @617M   │            │
+    │  │ OPTICAL RAM    │  │  double-buf    │  │  accumulate    │            │
+    │  │                │  │                │  │                │            │
+    │  │ Weights stay   │  │  Activations   │  │  Results →     │            │
+    │  │ OPTICAL!       │  │  from host     │  │  back to host  │            │
+    │  └───────┬────────┘  └───────┬────────┘  └───────┬────────┘            │
+    │          │                   │                   │                      │
+    │          │    OPTICAL        │    OPTICAL        │    OPTICAL          │
+    │          │                   │                   │                      │
+    │          └───────────────────┴───────────────────┘                      │
+    │                              │                                          │
+    │                      ┌───────┴───────┐                                  │
+    │                      │  CLOCK HUB    │                                  │
+    │                      │   617 MHz     │                                  │
+    │                      │  (from Kerr)  │                                  │
+    │                      └───────────────┘                                  │
+    │                              │                                          │
+    │                      TO/FROM 81×81 PE ARRAY                            │
+    │                      (all optical data paths)                          │
+    └─────────────────────────────────────────────────────────────────────────┘
+
+    Key Architecture Points:
+    1. WEIGHTS: Stored in CPU's 3-tier optical RAM, streamed optically to PEs
+       - No per-PE weight storage needed
+       - Weights stay optical from RAM through compute
+       - Arbitrary model sizes (not limited by PE registers)
+
+    2. NR-IOC handles HOST BOUNDARY conversions only:
+       - Activations: Host (binary electronic) → NR-IOC (E/O) → Optical
+       - Results: Optical → NR-IOC (O/E) → Host (binary electronic)
+       - Weights: Already optical in CPU RAM, just routed through
+
+    3. Inside the optical domain, data NEVER converts back to electronic
 
     Specifications:
-    - Weight loading: 59,049 trits in ~96 μs
+    - Weight streaming: 59,049 trits in ~96 μs (from optical RAM)
     - Activation throughput: 50 Gtrits/s (81 × 617 MHz × 9 trits)
     - Result throughput: 50 Gtrits/s
-    - Zero-stall double buffering
-    - Integrated 617 MHz clock distribution
+    - Zero-stall double buffering for activations
+    - Integrated 617 MHz Kerr clock distribution
     """
     c = gf.Component("super_ioc_module")
 
@@ -769,9 +1031,9 @@ def super_ioc_module() -> Component:
     # Title Block
     # ==========================================================================
 
-    c.add_label("SUPER IOC MODULE", position=(total_width/2, total_height - 30), layer=LAYER_TEXT)
-    c.add_label("For 81×81 Optical Systolic Array", position=(total_width/2, total_height - 55), layer=LAYER_TEXT)
-    c.add_label("Replaces RAM with Streaming Architecture", position=(total_width/2, total_height - 80), layer=LAYER_TEXT)
+    c.add_label("SUPER NR-IOC MODULE", position=(total_width/2, total_height - 30), layer=LAYER_TEXT)
+    c.add_label("Host Interface for 81×81 Optical Systolic Array", position=(total_width/2, total_height - 55), layer=LAYER_TEXT)
+    c.add_label("Weights Stream from CPU Optical RAM (All-Optical Path)", position=(total_width/2, total_height - 80), layer=LAYER_TEXT)
 
     # ==========================================================================
     # Kerr Clock Source (top left)
@@ -795,11 +1057,11 @@ def super_ioc_module() -> Component:
                   layer=LAYER_CLOCK)
 
     # ==========================================================================
-    # Weight Loader Unit (left side)
+    # Weight Streaming Unit (left side) - reads from CPU optical RAM
     # ==========================================================================
 
     weight_loader = c << weight_loader_unit()
-    weight_loader.dmove((50, total_height/2 - 300))
+    weight_loader.dmove((50, total_height/2 - 350))
 
     # ==========================================================================
     # Activation Streamer Unit (center)
@@ -856,8 +1118,8 @@ def super_ioc_module() -> Component:
 
     array_interface_y = total_height/2
 
-    # Weight outputs (81 lines going right)
-    c.add_label("TO ARRAY: WEIGHTS", position=(total_width - 100, total_height - 150), layer=LAYER_TEXT)
+    # Weight outputs (81 lines going right) - optical from CPU RAM
+    c.add_label("TO ARRAY: WEIGHTS (OPTICAL)", position=(total_width - 100, total_height - 150), layer=LAYER_TEXT)
     for i in range(0, 81, 5):
         y = total_height - 200 - i * 4
         c.add_polygon([(total_width - 50, y), (total_width, y),
@@ -889,13 +1151,13 @@ def super_ioc_module() -> Component:
 
     c.add_label("SPECIFICATIONS", position=(spec_x + 175, spec_y + 180), layer=LAYER_TEXT)
     c.add_label("─────────────────", position=(spec_x + 175, spec_y + 165), layer=LAYER_TEXT)
-    c.add_label("Weight capacity: 6,561 × 9t", position=(spec_x + 175, spec_y + 140), layer=LAYER_TEXT)
-    c.add_label("Weight load time: ~96 μs", position=(spec_x + 175, spec_y + 120), layer=LAYER_TEXT)
-    c.add_label("Act throughput: 50 Gt/s", position=(spec_x + 175, spec_y + 100), layer=LAYER_TEXT)
-    c.add_label("Result throughput: 50 Gt/s", position=(spec_x + 175, spec_y + 80), layer=LAYER_TEXT)
-    c.add_label("Clock: 617 MHz (Kerr)", position=(spec_x + 175, spec_y + 60), layer=LAYER_TEXT)
-    c.add_label("Host: PCIe Gen4 x8", position=(spec_x + 175, spec_y + 40), layer=LAYER_TEXT)
-    c.add_label("Power: ~10W estimated", position=(spec_x + 175, spec_y + 20), layer=LAYER_TEXT)
+    c.add_label("Weights: FROM CPU OPTICAL RAM", position=(spec_x + 175, spec_y + 145), layer=LAYER_TEXT)
+    c.add_label("Weight stream: ~96 μs refresh", position=(spec_x + 175, spec_y + 125), layer=LAYER_TEXT)
+    c.add_label("Act throughput: 50 Gt/s", position=(spec_x + 175, spec_y + 105), layer=LAYER_TEXT)
+    c.add_label("Result throughput: 50 Gt/s", position=(spec_x + 175, spec_y + 85), layer=LAYER_TEXT)
+    c.add_label("Clock: 617 MHz (Kerr)", position=(spec_x + 175, spec_y + 65), layer=LAYER_TEXT)
+    c.add_label("Host: PCIe Gen4 x8", position=(spec_x + 175, spec_y + 45), layer=LAYER_TEXT)
+    c.add_label("All-optical data path!", position=(spec_x + 175, spec_y + 25), layer=LAYER_TEXT)
 
     # ==========================================================================
     # External Ports
@@ -915,10 +1177,11 @@ def super_ioc_module() -> Component:
     # Clock output to array
     c.add_port("clk_to_array", center=(total_width, total_height/2), width=20, orientation=0, layer=LAYER_CLOCK)
 
-    print("Super IOC Module generated!")
+    print("Super NR-IOC Module generated!")
     print(f"  Dimensions: {total_width} × {total_height} μm")
-    print(f"  Weight capacity: {TOTAL_PES * TRITS_PER_VALUE} trits")
+    print(f"  Weight streaming: {TOTAL_PES * TRITS_PER_VALUE} trits from CPU optical RAM")
     print(f"  Throughput: {ARRAY_SIZE * CLOCK_FREQ_MHZ * TRITS_PER_VALUE / 1000:.1f} Gtrits/s")
+    print(f"  Architecture: All-optical data path (E/O at host boundary only)")
 
     return c
 
@@ -970,24 +1233,29 @@ def complete_ai_accelerator() -> Component:
 
 def main():
     print("=" * 70)
-    print("  SUPER IOC MODULE GENERATOR")
-    print("  Enhanced I/O for Optical Systolic Array")
+    print("  SUPER NR-IOC MODULE GENERATOR")
+    print("  Host Interface for Optical Systolic Array")
     print("=" * 70)
     print()
+    print("NEW ARCHITECTURE: Optical RAM Weight Streaming")
+    print("  - Weights stored in CPU's 3-tier optical RAM")
+    print("  - Streamed optically to PE array (no E/O conversion)")
+    print("  - NR-IOC handles host boundary only")
+    print()
     print("Features:")
-    print("  - Weight Loader: 6,561 weights in ~96 μs")
-    print("  - Activation Streamer: 81-ch double-buffered")
-    print("  - Result Collector: 81-ch with accumulation")
+    print("  - Weight Streaming: From CPU optical RAM @ 617 MHz")
+    print("  - Activation Streamer: 81-ch double-buffered (host E/O)")
+    print("  - Result Collector: 81-ch with accumulation (O/E to host)")
     print("  - Integrated 617 MHz Kerr clock")
-    print("  - NO EXTERNAL RAM REQUIRED")
+    print("  - ALL-OPTICAL DATA PATH for weights!")
     print()
     print("Options:")
-    print("  1. Generate complete Super IOC module")
-    print("  2. Generate Weight Loader unit only")
+    print("  1. Generate complete Super NR-IOC module")
+    print("  2. Generate Weight Streaming unit only")
     print("  3. Generate Activation Streamer unit only")
     print("  4. Generate Result Collector unit only")
     print("  5. Generate Clock Distribution hub only")
-    print("  6. Generate complete AI Accelerator (IOC + Array)")
+    print("  6. Generate complete AI Accelerator (NR-IOC + Array)")
     print()
 
     choice = input("Select option (1-6): ").strip()
@@ -997,14 +1265,14 @@ def main():
     os.makedirs(gds_dir, exist_ok=True)
 
     if choice == "1":
-        print("\nGenerating Super IOC module...")
+        print("\nGenerating Super NR-IOC module...")
         comp = super_ioc_module()
-        output_path = os.path.join(gds_dir, "super_ioc_module.gds")
+        output_path = os.path.join(gds_dir, "super_nrioc_module.gds")
 
     elif choice == "2":
-        print("\nGenerating Weight Loader unit...")
+        print("\nGenerating Weight Streaming unit...")
         comp = weight_loader_unit()
-        output_path = os.path.join(gds_dir, "weight_loader_unit.gds")
+        output_path = os.path.join(gds_dir, "weight_streaming_unit.gds")
 
     elif choice == "3":
         print("\nGenerating Activation Streamer unit...")

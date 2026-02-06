@@ -12,7 +12,32 @@ Specifications:
 - Precision: 9 trits per value (~14 bits equivalent)
 - Clock: 617 MHz (from Kerr resonator)
 - Throughput: 6,561 MACs/cycle = 4.05 TMAC/s
-- Architecture: Weight-stationary systolic flow
+- Architecture: Weight-STREAMING systolic flow (NEW)
+
+=============================================================================
+ARCHITECTURE UPDATE (Feb 2026): STREAMING WEIGHTS FROM OPTICAL RAM
+=============================================================================
+
+BREAKTHROUGH: Weights are now stored in the CPU's 3-tier optical RAM system
+and STREAMED to PEs via optical waveguides. This eliminates the need for
+exotic per-PE tristable storage (bistable Kerr resonators).
+
+Previous architecture (DEPRECATED):
+    - Each PE had a 9-trit weight register using bistable optical storage
+    - Weights loaded once, held stationary during computation
+    - Required exotic per-PE tristable storage components
+
+New architecture (CURRENT):
+    - Weights stored in CPU's optical RAM tiers (Ring resonator / AWG / MEMS)
+    - Weights stream to PEs via dedicated optical waveguide bus
+    - PEs are now SIMPLE: just mixer + routing + accumulator
+    - No exotic per-PE storage needed - standard photonic components only
+
+Benefits:
+    - Simpler PE design (fewer components, higher yield)
+    - Leverages existing optical RAM infrastructure
+    - More flexible weight access patterns
+    - Easier to fabricate and test
 
 For AI workloads:
 - Matrix multiply: Use LOG mode (MUL→ADD)
@@ -278,9 +303,18 @@ def mode_selector_3way() -> Component:
 @gf.cell
 def weight_register_9trit() -> Component:
     """
-    9-trit weight register using bistable optical storage.
+    DEPRECATED: 9-trit weight register using bistable optical storage.
 
-    Holds weight value for weight-stationary systolic operation.
+    This component is DEPRECATED as of Feb 2026. The new architecture streams
+    weights from the CPU's optical RAM rather than storing them per-PE.
+
+    Kept for backward compatibility and reference only. New designs should use
+    processing_element_streaming() which receives weights via input port.
+
+    Historical note:
+        Original design used bistable Kerr resonators for per-PE weight storage.
+        This required exotic tristable optical components that are difficult to
+        fabricate reliably. The new streaming architecture eliminates this need.
     """
     c = gf.Component()
 
@@ -307,6 +341,102 @@ def weight_register_9trit() -> Component:
     c.add_port("we", center=(18, -3.5), width=6, orientation=270, layer=LAYER_METAL_PAD)
 
     c.add_label("W[8:0]", position=(18, 7), layer=LAYER_TEXT)
+    c.add_label("DEPRECATED", position=(18, -8), layer=LAYER_TEXT)
+
+    return c
+
+
+# =============================================================================
+# Optical RAM Weight Interface (NEW ARCHITECTURE)
+# =============================================================================
+
+@gf.cell
+def optical_ram_weight_interface(n_weight_channels: int = 81) -> Component:
+    """
+    Interface between CPU optical RAM and the systolic array weight bus.
+
+    NEW ARCHITECTURE (Feb 2026):
+
+    Weights are stored in the CPU's 3-tier optical RAM system:
+        Tier 1: Ring resonator arrays (fastest, smallest - ~1KB)
+        Tier 2: AWG-based banks (medium speed/size - ~64KB)
+        Tier 3: MEMS mirror arrays (largest, slower - ~1MB+)
+
+    This interface receives weight values from optical RAM via waveguides
+    and distributes them to the PE array columns. Each column gets its own
+    dedicated weight channel.
+
+    Data flow:
+        Optical RAM → Weight Bus → Column Splitters → PEs
+
+    Architecture:
+        ┌─────────────────────────────────────────────────────────┐
+        │                    OPTICAL RAM                          │
+        │   (Ring resonators / AWG banks / MEMS mirrors)          │
+        └────────────────────────┬────────────────────────────────┘
+                                 │ Weight stream (9 trits/cycle)
+                                 ▼
+        ┌─────────────────────────────────────────────────────────┐
+        │              WEIGHT DISTRIBUTION BUS                     │
+        │   ┌─────┬─────┬─────┬─────┬─────┬─────┬─────┐          │
+        │   │ WDM │ WDM │ WDM │ ... │ WDM │ WDM │ WDM │          │
+        │   │Demux│Demux│Demux│     │Demux│Demux│Demux│          │
+        │   └──┬──┴──┬──┴──┬──┴─────┴──┬──┴──┬──┴──┬──┘          │
+        └──────┼─────┼─────┼───────────┼─────┼─────┼──────────────┘
+               ↓     ↓     ↓           ↓     ↓     ↓
+             Col0  Col1  Col2  ...  Col78 Col79 Col80
+               ↓     ↓     ↓           ↓     ↓     ↓
+              PE    PE    PE    ...   PE    PE    PE  (all rows)
+
+    Args:
+        n_weight_channels: Number of weight output channels (matches array columns)
+
+    Returns:
+        Component with weight_in port and n_weight_channels output ports
+    """
+    c = gf.Component(f"optical_ram_weight_interface_{n_weight_channels}ch_{_uid()}")
+
+    bus_length = n_weight_channels * 5 + 20  # 5μm per channel + margins
+    bus_height = 25
+
+    # Main distribution bus
+    c.add_polygon([
+        (0, 0), (bus_length, 0), (bus_length, bus_height), (0, bus_height)
+    ], layer=LAYER_WEIGHT)
+
+    c.add_label("WEIGHT DISTRIBUTION BUS", position=(bus_length/2, bus_height + 5), layer=LAYER_TEXT)
+    c.add_label("From Optical RAM", position=(bus_length/2, bus_height + 15), layer=LAYER_TEXT)
+
+    # WDM demux blocks for each channel
+    for i in range(n_weight_channels):
+        x = 10 + i * 5
+
+        # Demux block
+        c.add_polygon([
+            (x, -15), (x+4, -15), (x+4, 0), (x, 0)
+        ], layer=LAYER_AWG)
+
+        # Output waveguide to PE column
+        c.add_polygon([
+            (x+1.5, -15), (x+2.5, -15), (x+2.5, -25), (x+1.5, -25)
+        ], layer=LAYER_WAVEGUIDE)
+
+        # Output port for this column
+        c.add_port(f"weight_out_{i}", center=(x+2, -25), width=WAVEGUIDE_WIDTH,
+                   orientation=270, layer=LAYER_WAVEGUIDE)
+
+    # Input port from optical RAM
+    c.add_polygon([(-10, bus_height/2 - 2), (0, bus_height/2 - 2),
+                   (0, bus_height/2 + 2), (-10, bus_height/2 + 2)], layer=LAYER_WAVEGUIDE)
+    c.add_port("weight_in", center=(-10, bus_height/2), width=4,
+               orientation=180, layer=LAYER_WAVEGUIDE)
+
+    # Control port for weight addressing
+    c.add_polygon([(bus_length/2 - 10, bus_height + 3), (bus_length/2 + 10, bus_height + 3),
+                   (bus_length/2 + 10, bus_height + 8), (bus_length/2 - 10, bus_height + 8)],
+                  layer=LAYER_METAL_PAD)
+    c.add_port("addr_ctrl", center=(bus_length/2, bus_height + 5.5), width=20,
+               orientation=90, layer=LAYER_METAL_PAD)
 
     return c
 
@@ -316,16 +446,177 @@ def weight_register_9trit() -> Component:
 # =============================================================================
 
 @gf.cell
+def processing_element_streaming(
+    pe_id: Tuple[int, int] = (0, 0)
+) -> Component:
+    """
+    Streaming Processing Element - NEW SIMPLIFIED ARCHITECTURE (Feb 2026).
+
+    This is the new standard PE design. Weights stream in from optical RAM
+    rather than being stored locally. Much simpler than the old design.
+
+    Architecture:
+
+        Weight_In ─────────────────────────────┐  (from optical RAM via waveguide)
+        (streaming)                            │
+                                               ▼
+        Input_H ──→ [MODE_MUX] ──┬─ LINEAR ──→ [SFG MIXER] ──→ [ACC] ──→ Output_V
+        (horizontal)             ├─ LOG ─────→     ↑
+                                 └─ LOG-LOG ──→    │
+                                                   │
+        Input_V ───────────────────────────────────┘
+        (vertical, partial sum from above)
+
+    What changed from old architecture:
+        - NO internal weight storage (no bistable Kerr resonators)
+        - Weights arrive via dedicated input port each cycle
+        - Simpler, fewer components, easier to fabricate
+        - Standard photonic components only
+
+    Components per PE:
+        - 1x Mode selector MUX (3-way: LINEAR/LOG/LOG-LOG)
+        - 1x SFG mixer (multiply activation × weight)
+        - 1x Optical accumulator (partial sum loop)
+        - 2x LOG converters (for LOG and LOG-LOG paths)
+        - 2x EXP converters (domain restoration)
+        - Waveguide routing
+
+    Modes:
+        LINEAR (00): Direct add/sub
+        LOG (01):    MUL/DIV via log-domain add/sub
+        LOG-LOG (10): POWER via log-log-domain add/sub
+
+    Args:
+        pe_id: (row, col) identifier
+    """
+    c = gf.Component(f"PE_stream_{pe_id[0]}_{pe_id[1]}_{_uid()}")
+
+    # Component dimensions
+    total_width = PE_WIDTH
+    total_height = PE_HEIGHT
+
+    # Background
+    c.add_polygon([(0, 0), (total_width, 0), (total_width, total_height), (0, total_height)],
+                  layer=LAYER_BUS)
+
+    # =========================================================================
+    # Weight Input Path (streaming from optical RAM)
+    # =========================================================================
+
+    # Weight input waveguide (comes from top, from optical RAM bus)
+    c.add_polygon([
+        (total_width - 10 - WAVEGUIDE_WIDTH/2, total_height),
+        (total_width - 10 + WAVEGUIDE_WIDTH/2, total_height),
+        (total_width - 10 + WAVEGUIDE_WIDTH/2, total_height - 15),
+        (total_width - 10 - WAVEGUIDE_WIDTH/2, total_height - 15)
+    ], layer=LAYER_WAVEGUIDE)
+
+    c.add_label("W_in", position=(total_width - 10, total_height - 5), layer=LAYER_TEXT)
+
+    # =========================================================================
+    # Input Processing Path (horizontal data flow)
+    # =========================================================================
+
+    # Mode selector MUX
+    mux = c << mode_selector_3way()
+    mux.dmove((2, total_height/2 - 4))
+
+    # LINEAR path (bypass)
+    # Direct connection
+
+    # LOG path (single log converter)
+    log1 = c << optical_log_converter(length=8)
+    log1.dmove((8, total_height/2 + 8))
+
+    # LOG-LOG path (two log converters in series)
+    log2a = c << optical_log_converter(length=6)
+    log2a.dmove((8, total_height/2 - 15))
+
+    log2b = c << optical_log_converter(length=6)
+    log2b.dmove((22, total_height/2 - 15))
+
+    # =========================================================================
+    # Core ALU (SFG MIXER - activation × weight)
+    # =========================================================================
+
+    alu = c << optical_adder_subtractor(length=10)
+    alu.dmove((total_width/2 - 5, total_height/2 - 5))
+
+    # =========================================================================
+    # Output Processing (reverse domain conversion)
+    # =========================================================================
+
+    # EXP converters for domain restoration
+    exp1 = c << optical_exp_converter(length=6)
+    exp1.dmove((total_width - 18, total_height/2 + 8))
+
+    exp2a = c << optical_exp_converter(length=5)
+    exp2a.dmove((total_width - 20, total_height/2 - 15))
+
+    exp2b = c << optical_exp_converter(length=5)
+    exp2b.dmove((total_width - 12, total_height/2 - 15))
+
+    # =========================================================================
+    # Accumulator
+    # =========================================================================
+
+    acc = c << optical_accumulator(loop_length=15)
+    acc.dmove((total_width - 25, total_height/2 - 2))
+
+    # =========================================================================
+    # Ports
+    # =========================================================================
+
+    # Horizontal data flow (activation input from left)
+    c.add_port("in_h", center=(0, total_height/2), width=WAVEGUIDE_WIDTH,
+               orientation=180, layer=LAYER_WAVEGUIDE)
+
+    # Horizontal data flow (activation passthrough to next PE on right)
+    c.add_port("out_h", center=(total_width, total_height/2), width=WAVEGUIDE_WIDTH,
+               orientation=0, layer=LAYER_WAVEGUIDE)
+
+    # Vertical data flow (partial sum from above)
+    c.add_port("in_v", center=(total_width/2, total_height), width=WAVEGUIDE_WIDTH,
+               orientation=90, layer=LAYER_WAVEGUIDE)
+
+    # Vertical data flow (partial sum to below)
+    c.add_port("out_v", center=(total_width/2, 0), width=WAVEGUIDE_WIDTH,
+               orientation=270, layer=LAYER_WAVEGUIDE)
+
+    # Weight input from optical RAM (streaming)
+    c.add_port("weight_in", center=(total_width - 10, total_height), width=WAVEGUIDE_WIDTH,
+               orientation=90, layer=LAYER_WAVEGUIDE)
+
+    # Control ports
+    c.add_port("mode_sel", center=(10, total_height), width=4,
+               orientation=90, layer=LAYER_METAL_PAD)
+    c.add_port("acc_clear", center=(total_width - 15, 0), width=4,
+               orientation=270, layer=LAYER_METAL_PAD)
+
+    # PE identifier label
+    c.add_label(f"PE[{pe_id[0]},{pe_id[1]}]", position=(total_width/2, total_height - 3), layer=LAYER_TEXT)
+    c.add_label("STREAM", position=(total_width/2, 3), layer=LAYER_TEXT)
+
+    return c
+
+
+@gf.cell
 def processing_element_multidomain(
     pe_id: Tuple[int, int] = (0, 0),
     include_weight_reg: bool = True
 ) -> Component:
     """
-    Single Processing Element with LINEAR/LOG/LOG-LOG support.
+    LEGACY Processing Element with LINEAR/LOG/LOG-LOG support.
 
-    Architecture:
+    NOTE: This is the OLD architecture with optional per-PE weight storage.
+    For new designs, use processing_element_streaming() instead.
 
-        Weight ──────────────────────────────┐
+    The include_weight_reg parameter now defaults to True for backward
+    compatibility but is DEPRECATED. New code should use the streaming PE.
+
+    Architecture (OLD - with local weight storage):
+
+        Weight ──────────────────────────────┐  (from local register - DEPRECATED)
                                              │
         Input_H ──→ [MODE_MUX] ──┬─ LINEAR ──┼──→ [ADD/SUB] ──→ [ACC] ──→ Output_V
         (horizontal)             ├─ LOG ─────┤        ↑
@@ -341,7 +632,7 @@ def processing_element_multidomain(
 
     Args:
         pe_id: (row, col) identifier
-        include_weight_reg: Whether to include weight storage
+        include_weight_reg: DEPRECATED - Whether to include weight storage
     """
     c = gf.Component(f"PE_{pe_id[0]}_{pe_id[1]}_{_uid()}")
 
@@ -453,10 +744,74 @@ def processing_element_multidomain(
 # =============================================================================
 
 @gf.cell
+def systolic_row_streaming(
+    row_id: int = 0,
+    n_cols: int = 81
+) -> Component:
+    """
+    Single row of the systolic array using STREAMING PEs (NEW ARCHITECTURE).
+
+    This is the new standard row design. PEs receive weights via streaming
+    input ports rather than local storage.
+
+    Args:
+        row_id: Row identifier
+        n_cols: Number of columns (PEs in this row)
+    """
+    c = gf.Component(f"systolic_row_stream_{row_id}_{_uid()}")
+
+    pe_pitch = PE_WIDTH + PE_SPACING
+
+    for col in range(n_cols):
+        pe = c << processing_element_streaming(pe_id=(row_id, col))
+        pe.dmove((col * pe_pitch, 0))
+
+        # Connect horizontal data flow between PEs
+        if col > 0:
+            # Waveguide connecting previous PE out_h to this PE in_h
+            x_start = (col - 1) * pe_pitch + PE_WIDTH
+            x_end = col * pe_pitch
+            y = PE_HEIGHT / 2
+            c.add_polygon([
+                (x_start, y - WAVEGUIDE_WIDTH/2),
+                (x_end, y - WAVEGUIDE_WIDTH/2),
+                (x_end, y + WAVEGUIDE_WIDTH/2),
+                (x_start, y + WAVEGUIDE_WIDTH/2)
+            ], layer=LAYER_WAVEGUIDE)
+
+    # Row input port (leftmost)
+    c.add_port("row_in", center=(0, PE_HEIGHT/2), width=WAVEGUIDE_WIDTH,
+               orientation=180, layer=LAYER_WAVEGUIDE)
+
+    # Row output port (rightmost)
+    c.add_port("row_out", center=(n_cols * pe_pitch - PE_SPACING, PE_HEIGHT/2),
+               width=WAVEGUIDE_WIDTH, orientation=0, layer=LAYER_WAVEGUIDE)
+
+    # Vertical ports for each PE (partial sums)
+    for col in range(n_cols):
+        x = col * pe_pitch + PE_WIDTH/2
+        c.add_port(f"col_{col}_in", center=(x, PE_HEIGHT), width=WAVEGUIDE_WIDTH,
+                   orientation=90, layer=LAYER_WAVEGUIDE)
+        c.add_port(f"col_{col}_out", center=(x, 0), width=WAVEGUIDE_WIDTH,
+                   orientation=270, layer=LAYER_WAVEGUIDE)
+
+    # Weight input ports for each PE (from optical RAM bus)
+    for col in range(n_cols):
+        x = col * pe_pitch + PE_WIDTH - 10
+        c.add_port(f"weight_{col}", center=(x, PE_HEIGHT), width=WAVEGUIDE_WIDTH,
+                   orientation=90, layer=LAYER_WAVEGUIDE)
+
+    c.add_label(f"ROW {row_id} [STREAM]", position=(n_cols * pe_pitch / 2, PE_HEIGHT + 5), layer=LAYER_TEXT)
+
+    return c
+
+
+@gf.cell
 def systolic_row(
     row_id: int = 0,
     n_cols: int = 81,
-    include_weights: bool = True
+    include_weights: bool = True,
+    use_streaming: bool = True
 ) -> Component:
     """
     Single row of the systolic array.
@@ -464,8 +819,19 @@ def systolic_row(
     Args:
         row_id: Row identifier
         n_cols: Number of columns (PEs in this row)
-        include_weights: Include weight registers
+        include_weights: DEPRECATED (ignored if use_streaming=True)
+        use_streaming: Use new streaming PE architecture (default: True)
+
+    Note:
+        As of Feb 2026, use_streaming=True is the default. The old per-PE
+        weight storage architecture is deprecated but still available for
+        backward compatibility by setting use_streaming=False.
     """
+    # Use new streaming architecture by default
+    if use_streaming:
+        return systolic_row_streaming(row_id=row_id, n_cols=n_cols)
+
+    # Legacy path (deprecated)
     c = gf.Component(f"systolic_row_{row_id}_{_uid()}")
 
     pe_pitch = PE_WIDTH + PE_SPACING
@@ -506,12 +872,12 @@ def systolic_row(
         c.add_port(f"col_{col}_out", center=(x, 0), width=WAVEGUIDE_WIDTH,
                    orientation=270, layer=LAYER_WAVEGUIDE)
 
-    # Weight loading bus
+    # Weight loading bus (legacy)
     if include_weights:
         c.add_port("weight_bus", center=(0, 5), width=WAVEGUIDE_WIDTH,
                    orientation=180, layer=LAYER_WAVEGUIDE)
 
-    c.add_label(f"ROW {row_id}", position=(n_cols * pe_pitch / 2, PE_HEIGHT + 5), layer=LAYER_TEXT)
+    c.add_label(f"ROW {row_id} [LEGACY]", position=(n_cols * pe_pitch / 2, PE_HEIGHT + 5), layer=LAYER_TEXT)
 
     return c
 
@@ -524,7 +890,8 @@ def systolic_row(
 def optical_systolic_array_81x81(
     include_io_buffers: bool = True,
     include_weight_loader: bool = True,
-    include_clock_distribution: bool = True
+    include_clock_distribution: bool = True,
+    use_streaming: bool = True
 ) -> Component:
     """
     Complete 81×81 Optical Systolic Array for AI Acceleration.
@@ -533,34 +900,57 @@ def optical_systolic_array_81x81(
     - 6,561 Processing Elements (3^8)
     - 9-trit precision per value
     - LINEAR/LOG/LOG-LOG multi-domain support
-    - Weight-stationary data flow
+    - Weight-STREAMING data flow (NEW - from optical RAM)
     - 617 MHz clock rate
     - 4.05 TMAC/s peak throughput
 
-    Architecture:
+    NEW ARCHITECTURE (Feb 2026):
 
-        Weight Loading Bus (top)
-              ↓ ↓ ↓ ↓ ↓
-        ┌─────────────────────────────────────┐
-        │  ┌───┬───┬───┬─────┬───┬───┬───┐  │
-    A → │  │PE │PE │PE │ ... │PE │PE │PE │  │ → (activation passthrough)
-        │  ├───┼───┼───┼─────┼───┼───┼───┤  │
-    A → │  │PE │PE │PE │ ... │PE │PE │PE │  │
-        │  ├───┼───┼───┼─────┼───┼───┼───┤  │
-        │  │   :   :   :     :   :   :   │  │
-        │  │      81 rows × 81 cols       │  │
-        │  │   :   :   :     :   :   :   │  │
-        │  ├───┼───┼───┼─────┼───┼───┼───┤  │
-    A → │  │PE │PE │PE │ ... │PE │PE │PE │  │
-        │  └───┴───┴───┴─────┴───┴───┴───┘  │
-        └─────────────────────────────────────┘
+    Weights are now STREAMED from the CPU's optical RAM rather than stored
+    per-PE. This simplifies the PE design significantly:
+
+        OLD: Each PE had bistable Kerr resonator storage (exotic, hard to fab)
+        NEW: Weights stream in via waveguides (standard photonics)
+
+    Data Flow:
+
+        ┌────────────────────────────────────────────────────────────┐
+        │                      OPTICAL RAM                           │
+        │   (CPU's 3-tier memory: Ring/AWG/MEMS)                     │
+        └──────────────────────────┬─────────────────────────────────┘
+                                   │
+                    ┌──────────────┴──────────────┐
+                    │   WEIGHT DISTRIBUTION BUS   │
+                    │   (optical_ram_weight_interface)
+                    └──┬──────┬──────┬──────┬────┘
+                       ↓      ↓      ↓      ↓
+        ┌─────────────────────────────────────────┐
+        │  ┌───┬───┬───┬─────┬───┬───┬───┐      │
+    A → │  │PE │PE │PE │ ... │PE │PE │PE │      │ → (activation passthrough)
+        │  ├───┼───┼───┼─────┼───┼───┼───┤      │
+    A → │  │PE │PE │PE │ ... │PE │PE │PE │      │
+        │  ├───┼───┼───┼─────┼───┼───┼───┤      │
+        │  │   :   :   :     :   :   :   │      │
+        │  │      81 rows × 81 cols       │      │
+        │  │   :   :   :     :   :   :   │      │
+        │  ├───┼───┼───┼─────┼───┼───┼───┤      │
+    A → │  │PE │PE │PE │ ... │PE │PE │PE │      │
+        │  └───┴───┴───┴─────┴───┴───┴───┘      │
+        └─────────────────────────────────────────┘
               ↓ ↓ ↓ ↓ ↓
            Output columns (C = A × B)
 
+    Each PE is now SIMPLE (streaming architecture):
+        - Mode MUX (LINEAR/LOG/LOG-LOG)
+        - SFG mixer (activation × streamed_weight)
+        - Accumulator (partial sum loop)
+        - NO local weight storage needed!
+
     Args:
         include_io_buffers: Add input/output buffer stages
-        include_weight_loader: Add weight loading interface
+        include_weight_loader: Add weight loading interface (now connects to optical RAM)
         include_clock_distribution: Add clock tree
+        use_streaming: Use new streaming PE architecture (default: True)
     """
     c = gf.Component("optical_systolic_array_81x81")
 
@@ -577,7 +967,8 @@ def optical_systolic_array_81x81(
     # Main Array
     # =========================================================================
 
-    print(f"Generating 81×81 systolic array ({n_rows * n_cols} PEs)...")
+    arch_type = "STREAMING" if use_streaming else "LEGACY"
+    print(f"Generating 81×81 systolic array ({n_rows * n_cols} PEs) - {arch_type} architecture...")
 
     for row in range(n_rows):
         if row % 10 == 0:
@@ -586,7 +977,7 @@ def optical_systolic_array_81x81(
         row_comp = c << systolic_row(
             row_id=row,
             n_cols=n_cols,
-            include_weights=True
+            use_streaming=use_streaming
         )
         row_comp.dmove((100, 100 + row * row_pitch))
 
@@ -644,15 +1035,19 @@ def optical_systolic_array_81x81(
                       orientation=270, layer=LAYER_WAVEGUIDE)
 
     # =========================================================================
-    # Weight Loading Interface (Top)
+    # Weight Interface (Top) - NOW CONNECTS TO OPTICAL RAM
     # =========================================================================
 
     if include_weight_loader:
         weight_bus_y = 100 + array_height + 20
 
-        c.add_label("WEIGHT LOADING BUS", position=(array_width/2 + 100, weight_bus_y + 30), layer=LAYER_TEXT)
+        if use_streaming:
+            c.add_label("WEIGHT STREAMING BUS", position=(array_width/2 + 100, weight_bus_y + 45), layer=LAYER_TEXT)
+            c.add_label("(from Optical RAM)", position=(array_width/2 + 100, weight_bus_y + 30), layer=LAYER_TEXT)
+        else:
+            c.add_label("WEIGHT LOADING BUS (LEGACY)", position=(array_width/2 + 100, weight_bus_y + 30), layer=LAYER_TEXT)
 
-        # Main weight bus
+        # Main weight distribution bus
         c.add_polygon([
             (100, weight_bus_y),
             (100 + array_width, weight_bus_y),
@@ -660,9 +1055,15 @@ def optical_systolic_array_81x81(
             (100, weight_bus_y + 15)
         ], layer=LAYER_WEIGHT)
 
-        # Drop lines to each column
+        # Drop lines to each column (streaming weights to PEs)
         for col in range(n_cols):
-            x = 100 + col * pe_pitch + PE_WIDTH/2
+            if use_streaming:
+                # New architecture: weights go to PE weight_in port
+                x = 100 + col * pe_pitch + PE_WIDTH - 10
+            else:
+                # Legacy: weights go to PE center
+                x = 100 + col * pe_pitch + PE_WIDTH/2
+
             c.add_polygon([
                 (x - WAVEGUIDE_WIDTH/2, weight_bus_y),
                 (x + WAVEGUIDE_WIDTH/2, weight_bus_y),
@@ -670,7 +1071,7 @@ def optical_systolic_array_81x81(
                 (x - WAVEGUIDE_WIDTH/2, 100 + array_height)
             ], layer=LAYER_WAVEGUIDE)
 
-        # Weight input port
+        # Weight input port (connects to optical RAM interface)
         c.add_port("weight_in", center=(100, weight_bus_y + 7.5), width=15,
                   orientation=180, layer=LAYER_WEIGHT)
 
@@ -749,13 +1150,23 @@ def optical_systolic_array_81x81(
     c.add_label("OPTICAL SYSTOLIC ARRAY 81×81", position=(array_width/2 + 100, title_y), layer=LAYER_TEXT)
     c.add_label("6,561 PEs | 9-trit precision | LINEAR/LOG/LOG-LOG",
                 position=(array_width/2 + 100, title_y - 15), layer=LAYER_TEXT)
-    c.add_label("4.05 TMAC/s @ 617 MHz | Weight-Stationary",
-                position=(array_width/2 + 100, title_y - 30), layer=LAYER_TEXT)
+
+    if use_streaming:
+        c.add_label("4.05 TMAC/s @ 617 MHz | Weight-STREAMING from Optical RAM",
+                    position=(array_width/2 + 100, title_y - 30), layer=LAYER_TEXT)
+    else:
+        c.add_label("4.05 TMAC/s @ 617 MHz | Weight-Stationary (LEGACY)",
+                    position=(array_width/2 + 100, title_y - 30), layer=LAYER_TEXT)
 
     print(f"Array generation complete!")
+    print(f"  Architecture: {arch_type}")
     print(f"  Total PEs: {n_rows * n_cols}")
     print(f"  Array size: {array_width:.0f} × {array_height:.0f} μm")
     print(f"  Peak throughput: {n_rows * n_cols * CLOCK_FREQ_MHZ / 1e6:.2f} TMAC/s")
+    if use_streaming:
+        print(f"  Weight source: Optical RAM (streamed)")
+    else:
+        print(f"  Weight source: Per-PE registers (legacy)")
 
     return c
 
@@ -780,23 +1191,34 @@ def generate_full_array(output_path: Optional[str] = None) -> Component:
     return array
 
 
-def generate_test_array(size: int = 9, output_path: Optional[str] = None) -> Component:
-    """Generate a smaller test array (default 9×9)."""
+def generate_test_array(size: int = 9, output_path: Optional[str] = None, use_streaming: bool = True) -> Component:
+    """Generate a smaller test array (default 9×9).
 
-    c = gf.Component(f"optical_systolic_array_{size}x{size}_test")
+    Args:
+        size: Array dimensions (size × size)
+        output_path: Optional GDS output path
+        use_streaming: Use new streaming PE architecture (default: True)
+    """
+    arch_suffix = "stream" if use_streaming else "legacy"
+    c = gf.Component(f"optical_systolic_array_{size}x{size}_{arch_suffix}_test")
 
     pe_pitch = PE_WIDTH + PE_SPACING
     row_pitch = PE_HEIGHT + PE_SPACING
 
     for row in range(size):
         for col in range(size):
-            pe = c << processing_element_multidomain(
-                pe_id=(row, col),
-                include_weight_reg=True
-            )
+            if use_streaming:
+                pe = c << processing_element_streaming(pe_id=(row, col))
+            else:
+                pe = c << processing_element_multidomain(
+                    pe_id=(row, col),
+                    include_weight_reg=True
+                )
             pe.dmove((col * pe_pitch, row * row_pitch))
 
-    c.add_label(f"TEST ARRAY {size}×{size}", position=(size * pe_pitch / 2, size * row_pitch + 10), layer=LAYER_TEXT)
+    arch_label = "STREAMING" if use_streaming else "LEGACY"
+    c.add_label(f"TEST ARRAY {size}×{size} [{arch_label}]",
+                position=(size * pe_pitch / 2, size * row_pitch + 10), layer=LAYER_TEXT)
 
     if output_path:
         c.write_gds(output_path)
@@ -815,6 +1237,11 @@ def main():
     print("  AI Acceleration with Multi-Domain Support")
     print("=" * 70)
     print()
+    print("Architecture: STREAMING WEIGHTS (Feb 2026)")
+    print("  - Weights stored in CPU's optical RAM")
+    print("  - Streamed to PEs via waveguides")
+    print("  - No exotic per-PE storage needed!")
+    print()
     print("Capabilities:")
     print("  - LINEAR mode:   ADD/SUB operations")
     print("  - LOG mode:      MUL/DIV as ADD/SUB")
@@ -824,43 +1251,61 @@ def main():
     print("  1. Generate full 81×81 array (6,561 PEs) - WARNING: Large file!")
     print("  2. Generate 27×27 test array (729 PEs)")
     print("  3. Generate 9×9 test array (81 PEs)")
-    print("  4. Generate single PE (for inspection)")
+    print("  4. Generate single STREAMING PE (new architecture)")
     print("  5. Generate single row (81 PEs)")
+    print("  6. Generate optical RAM weight interface")
+    print("  7. [LEGACY] Generate single PE with local weight storage")
     print()
 
-    choice = input("Select option (1-5): ").strip()
+    choice = input("Select option (1-7): ").strip()
 
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     gds_dir = os.path.join(base_dir, 'data', 'gds')
     os.makedirs(gds_dir, exist_ok=True)
 
     if choice == "1":
-        print("\nGenerating 81×81 array... This may take a few minutes.")
-        output_path = os.path.join(gds_dir, "optical_systolic_81x81.gds")
+        print("\nGenerating 81×81 array with STREAMING architecture...")
+        print("This may take a few minutes.")
+        output_path = os.path.join(gds_dir, "optical_systolic_81x81_streaming.gds")
         array = generate_full_array(output_path)
 
     elif choice == "2":
-        print("\nGenerating 27×27 test array...")
-        output_path = os.path.join(gds_dir, "optical_systolic_27x27.gds")
-        array = generate_test_array(size=27, output_path=output_path)
+        print("\nGenerating 27×27 test array (streaming)...")
+        output_path = os.path.join(gds_dir, "optical_systolic_27x27_streaming.gds")
+        array = generate_test_array(size=27, output_path=output_path, use_streaming=True)
 
     elif choice == "3":
-        print("\nGenerating 9×9 test array...")
-        output_path = os.path.join(gds_dir, "optical_systolic_9x9.gds")
-        array = generate_test_array(size=9, output_path=output_path)
+        print("\nGenerating 9×9 test array (streaming)...")
+        output_path = os.path.join(gds_dir, "optical_systolic_9x9_streaming.gds")
+        array = generate_test_array(size=9, output_path=output_path, use_streaming=True)
 
     elif choice == "4":
-        print("\nGenerating single PE...")
-        pe = processing_element_multidomain(pe_id=(0, 0), include_weight_reg=True)
-        output_path = os.path.join(gds_dir, "optical_systolic_pe.gds")
+        print("\nGenerating single STREAMING PE (new architecture)...")
+        pe = processing_element_streaming(pe_id=(0, 0))
+        output_path = os.path.join(gds_dir, "optical_systolic_pe_streaming.gds")
         pe.write_gds(output_path)
         print(f"Saved to: {output_path}")
 
     elif choice == "5":
-        print("\nGenerating single row (81 PEs)...")
-        row = systolic_row(row_id=0, n_cols=81, include_weights=True)
-        output_path = os.path.join(gds_dir, "optical_systolic_row.gds")
+        print("\nGenerating single row (81 streaming PEs)...")
+        row = systolic_row(row_id=0, n_cols=81, use_streaming=True)
+        output_path = os.path.join(gds_dir, "optical_systolic_row_streaming.gds")
         row.write_gds(output_path)
+        print(f"Saved to: {output_path}")
+
+    elif choice == "6":
+        print("\nGenerating optical RAM weight interface (81 channels)...")
+        interface = optical_ram_weight_interface(n_weight_channels=81)
+        output_path = os.path.join(gds_dir, "optical_ram_weight_interface.gds")
+        interface.write_gds(output_path)
+        print(f"Saved to: {output_path}")
+
+    elif choice == "7":
+        print("\nGenerating single LEGACY PE (with local weight storage)...")
+        print("NOTE: This is the old architecture - use option 4 for new designs.")
+        pe = processing_element_multidomain(pe_id=(0, 0), include_weight_reg=True)
+        output_path = os.path.join(gds_dir, "optical_systolic_pe_legacy.gds")
+        pe.write_gds(output_path)
         print(f"Saved to: {output_path}")
 
     else:

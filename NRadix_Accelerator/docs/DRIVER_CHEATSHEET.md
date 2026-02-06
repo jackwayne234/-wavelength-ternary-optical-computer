@@ -52,14 +52,17 @@ def encode(val, num_trits=9):
 ## Commands
 
 ```c
-NR_LOAD_WEIGHTS  0x01   // Load weights to PEs
-NR_STREAM_INPUT  0x02   // Stream activations
-NR_COMPUTE       0x03   // Do the math
-NR_READ_OUTPUT   0x04   // Get results
-NR_RESET         0x0F   // Reset
+NR_STREAM_WEIGHTS 0x01  // Stream weights from optical RAM to PEs
+NR_STREAM_INPUT   0x02  // Stream activations
+NR_COMPUTE        0x03  // Do the math
+NR_READ_OUTPUT    0x04  // Get results
+NR_RESET          0x0F  // Reset
 ```
 
-**Typical flow:** `LOAD_WEIGHTS → STREAM_INPUT → READ_OUTPUT`
+**Typical flow:** `STREAM_WEIGHTS → STREAM_INPUT → READ_OUTPUT`
+
+**Note:** Weights are stored in optical RAM (CPU's 3-tier memory) and STREAMED to PEs.
+PEs are simple (mixer + routing only) - no per-PE weight storage.
 
 ---
 
@@ -68,9 +71,11 @@ NR_RESET         0x0F   // Reset
 | What | Time |
 |------|------|
 | NR-IOC conversion | 6.5ns |
-| Weight load 27×27 | ~5ns |
-| Weight load 81×81 | ~131ns |
+| Weight stream 27×27 | ~5ns |
+| Weight stream 81×81 | ~131ns |
 | PCIe (per KB) | ~1μs |
+
+**Note:** Weights stream from optical RAM, not loaded to per-PE storage.
 
 ---
 

@@ -69,6 +69,9 @@ The Input/Output Converter (IOC) is the hardware/software bridge between convent
 │   Wavelength-encoded balanced ternary computation @ 617 MHz                  │
 │   1550nm = -1  │  1310nm = 0  │  1064nm = +1                                │
 │                                                                              │
+│   PEs are SIMPLE: SFG mixer + optical routing only                          │
+│   Weights STREAMED from optical RAM (not stored per-PE)                     │
+│                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 

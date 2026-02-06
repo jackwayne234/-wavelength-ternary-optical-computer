@@ -30,23 +30,21 @@ mkdir -p "$RESULTS_DIR"
 mkdir -p "$LOGS_DIR"
 
 # -----------------------------------------------------------------------------
-# Detect and Configure OpenMP
+# Detect CPU cores for MPI
 # -----------------------------------------------------------------------------
 NUM_CORES=$(nproc)
-export OMP_NUM_THREADS=$NUM_CORES
-export OMP_PROC_BIND=spread
-export OMP_PLACES=threads
 
-# Meep-specific threading (if available)
-export MEEP_NUM_THREADS=$NUM_CORES
+# NOTE: OpenMP/OMP_NUM_THREADS does NOT work with the default pymeep build!
+# The conda-forge 'nompi' pymeep is SINGLE-THREADED.
+# For parallelism, you MUST use MPI. See setup_mpi_meep.sh
 
 echo "=============================================="
-echo "N-Radix 81x81 WDM Array Simulation"
+echo "N-Radix 81x81 WDM Array Simulation (MPI)"
 echo "=============================================="
 echo "Started: $(date)"
 echo "Host: $(hostname)"
 echo "CPU cores: $NUM_CORES"
-echo "OMP_NUM_THREADS: $OMP_NUM_THREADS"
+echo "MPI processes: $NUM_CORES"
 echo "Log file: $LOG_FILE"
 echo "=============================================="
 echo ""
@@ -76,10 +74,19 @@ else
     exit 1
 fi
 
-# Verify Python and Meep
+# Verify Python, Meep, and MPI
 echo "Python: $(which python)" | tee -a "$LOG_FILE"
 echo "Meep version: $(python -c 'import meep; print(meep.__version__)')" | tee -a "$LOG_FILE"
+echo "MPI enabled: $(python -c 'import meep; print(meep.with_mpi())')" | tee -a "$LOG_FILE"
+echo "mpirun: $(which mpirun)" | tee -a "$LOG_FILE"
 echo "" | tee -a "$LOG_FILE"
+
+# Check MPI is available
+if ! python -c 'import meep; assert meep.with_mpi(), "MPI not enabled"' 2>/dev/null; then
+    echo "ERROR: MPI Meep not installed!" | tee -a "$LOG_FILE"
+    echo "Run ./setup_mpi_meep.sh first to install MPI-enabled Meep." | tee -a "$LOG_FILE"
+    exit 1
+fi
 
 # -----------------------------------------------------------------------------
 # Check for simulation script
@@ -122,8 +129,9 @@ echo "" | tee -a "$LOG_FILE"
 
 START_TIME=$(date +%s)
 
-# Run with full output to terminal and log
-python "$SIM_SCRIPT" 2>&1 | tee -a "$LOG_FILE"
+# Run with MPI using all available cores
+echo "Running with MPI ($NUM_CORES processes)..." | tee -a "$LOG_FILE"
+mpirun -np $NUM_CORES python "$SIM_SCRIPT" 2>&1 | tee -a "$LOG_FILE"
 EXIT_CODE=${PIPESTATUS[0]}
 
 END_TIME=$(date +%s)

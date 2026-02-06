@@ -37,12 +37,16 @@ This document specifies the physical interface to the N-Radix optical chip. The 
     ┌───────────────────────────▼────────────────┴─────────┐
     │                   N-RADIX OPTICAL CHIP               │
     │                                                       │
-    │   Input         ┌─────────────────┐                  │
+    │   Activations   ┌─────────────────┐                  │
     │   Waveguides ──►│  Systolic Array │──► Photodetectors│
     │                 │   (27×27 or     │                  │
-    │   Kerr Clock    │    81×81 PEs)   │   Electrical     │
-    │   (on-chip) ───►│                 │   Outputs        │
-    │                 └─────────────────┘                  │
+    │   Weight        │    81×81 PEs)   │   Electrical     │
+    │   Stream ──────►│                 │   Outputs        │
+    │   (from         │   PEs = mixer   │                  │
+    │   optical RAM)  │   + routing     │                  │
+    │                 │   (no per-PE    │                  │
+    │   Kerr Clock    │   weight store) │                  │
+    │   (on-chip) ───►└─────────────────┘                  │
     │                                                       │
     └──────────────────────────────────────────────────────┘
 ```
@@ -234,10 +238,26 @@ Start with MVP. Prove the chip works. Add triplets for more parallelism without 
 The chip is passive. It does NOT require:
 
 - ❌ On-chip light generation (you provide lasers)
-- ❌ On-chip memory refresh (Kerr bistable is static)
+- ❌ Per-PE weight storage (weights streamed from optical RAM)
 - ❌ Software/firmware updates (logic is geometry)
 - ❌ Active cooling (photons don't generate heat like electrons)
 - ❌ High voltage supplies (optical, not electronic logic)
+
+---
+
+## Architecture Insight: Streamed Weights
+
+**BREAKTHROUGH (Feb 2026):** Weights are NOT stored per-PE.
+
+**Old approach:** Each Processing Element had its own bistable Kerr resonator for weight storage. Complex per-PE storage with tight tolerances.
+
+**New approach:** Weights are stored in optical RAM (the CPU's 3-tier memory system) and STREAMED to PEs via waveguides.
+
+**Benefits:**
+1. **Simpler PEs** - Each PE is just a mixer + optical routing. No exotic per-PE storage.
+2. **Higher yield** - Passive optics are easier to fabricate reliably than per-PE memory elements.
+3. **Unified memory** - The CPU's optical RAM serves both CPU operations AND accelerator weight streaming.
+4. **All-optical path** - Weights flow from optical RAM → waveguides → PEs → computation without O/E/O conversion.
 
 ---
 

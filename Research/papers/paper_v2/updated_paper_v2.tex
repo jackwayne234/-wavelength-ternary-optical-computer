@@ -15,7 +15,7 @@
 
 \begin{document}
 
-\title{N-Radix: A Wavelength-Division Optical Accelerator\\Bypassing the Radix Economy Penalty}
+\title{Wavelength-Division Ternary Computing II:\\N-Radix Optical AI Accelerator vs. B200 and Frontier}
 
 \author{Christopher Riner%
 \thanks{Independent Researcher: Chesapeake, VA, US. Email: chrisriner45@gmail.com}}
@@ -23,7 +23,7 @@
 \maketitle
 
 \begin{abstract}
-We present N-Radix, an optical accelerator architecture based on wavelength-division ternary logic. Building on our prior theoretical work demonstrating that wavelength encoding bypasses the radix economy penalty, we now describe a complete systolic array architecture optimized for AI/ML workloads. The design employs a novel log-domain tower scaling mechanism where the Input/Output Converter (IOC) reinterprets base-3 trits as $\text{trit}^3$ (3\textsuperscript{3} encoding), yielding up to 9$\times$ throughput improvement for pure addition workloads while using identical optical hardware. We analyze the practical limits of this scaling approach, showing that while 3\textsuperscript{3} encoding is achievable with standard 64-bit hardware, higher towers (3\textsuperscript{3}\textsuperscript{3}\textsuperscript{3}) would require 12 terabit registers—placing them beyond physical realizability. For real-world matrix multiplication workloads (50\% multiply, 50\% add), the architecture delivers approximately 1.8$\times$ throughput improvement via Amdahl's Law. At 960$\times$960 scale, this yields 148 PFLOPS per chip for matrix multiply—meaning 8 chips could match Frontier's 1,200 PFLOPS, compared to Frontier's 9,402 nodes.
+We present N-Radix, an open-source optical accelerator architecture based on wavelength-division ternary logic, freely available for anyone to build upon. Building on our prior theoretical work \cite{riner2026wavelength} and open-source simulation framework \cite{riner2026software}\footnote{Source code and designs available at: \url{https://github.com/jackwayne234/-wavelength-ternary-optical-computer}}, we now describe a complete systolic array architecture optimized for AI/ML workloads. The design employs a novel log-domain tower scaling mechanism where the N-Radix Input/Output Converter (NR-IOC) reinterprets base-3 trits as $\text{trit}^3$ (3\textsuperscript{3} encoding), yielding up to 9$\times$ throughput improvement for addition operations. The architecture further leverages wavelength-division multiplexing (WDM) with up to 6 collision-free wavelength triplets in standard telecom bands, effectively multiplying compute throughput 6$\times$—the core mechanism by which wavelength encoding bypasses the radix economy penalty. We analyze the practical limits of this scaling approach, showing that while 3\textsuperscript{3} encoding is achievable with standard 64-bit hardware, higher towers (3\textsuperscript{3}\textsuperscript{3}\textsuperscript{3}) would require 12 terabit registers—placing them beyond physical realizability. For real-world matrix multiplication workloads (50\% multiply, 50\% add), the architecture delivers approximately 1.8$\times$ throughput improvement via Amdahl's Law. At 960$\times$960 scale, this yields 148 PFLOPS per chip for matrix multiply—59$\times$ NVIDIA's B200 (2.5 PFLOPS) while consuming an estimated 400W versus 1,000W. Compared to Frontier—the most powerful supercomputer in the world at 1,200 PFLOPS and 21 MW—equivalent performance would require only 8 N-Radix chips consuming less than 0.02\% of the power.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -39,7 +39,7 @@ This paper extends that theoretical foundation into a complete accelerator archi
 \begin{enumerate}
 \item A \textbf{systolic array architecture} where processing elements (PEs) perform optical add/subtract operations on wavelength-encoded trits
 \item \textbf{Log-domain tower scaling} that increases effective throughput by reinterpreting trit values at the system boundary
-\item \textbf{Input/Output Converter (IOC)} specifications for bridging binary electronic systems with optical ternary computation
+\item \textbf{N-Radix Input/Output Converter (NR-IOC)} specifications for bridging binary electronic systems with optical ternary computation
 \item \textbf{Practical performance analysis} showing realistic throughput gains for matrix multiply workloads
 \end{enumerate}
 
@@ -107,25 +107,40 @@ s   └────────────────────────�
 
 \subsection{Processing Element Design}
 
-Each PE contains:
+A key architectural simplification: PEs do \textbf{not} store weights locally. Instead, weights are stored in the CPU's 3-tier optical RAM hierarchy and \textbf{streamed} to PEs via waveguide routing. This eliminates the need for exotic per-PE tristable storage, dramatically improving fabrication yield.
+
+Each PE contains only:
 
 \begin{enumerate}
-\item \textbf{Weight register}: Bistable Kerr resonator storing one 9-trit weight
 \item \textbf{SFG mixer}: Performs optical multiply (in log domain) or add (in linear domain)
+\item \textbf{Waveguide routing}: Receives streaming weights from optical RAM tiers
 \item \textbf{Accumulator}: Aggregates partial sums
 \end{enumerate}
 
-\subsubsection{Weight Storage via Bistable Kerr Resonators}
+\subsubsection{Weight Streaming Architecture}
 
-Weights are stored using the optical Kerr effect ($\chi^{(3)}$ nonlinearity), which creates bistable states. Each trit locks to one of three wavelengths:
+Rather than storing weights in bistable Kerr resonators at each PE---which would require reliable tristable optical memory at every processing element---the architecture leverages the CPU's existing optical RAM infrastructure:
 
 \begin{itemize}
-\item High-power 1550 nm pulse $\rightarrow$ locks to $-1$
-\item High-power 1310 nm pulse $\rightarrow$ locks to $0$
-\item High-power 1064 nm pulse $\rightarrow$ locks to $+1$
+\item \textbf{L1 optical cache}: Fastest access, smallest capacity (per-core)
+\item \textbf{L2 optical cache}: Shared across core clusters
+\item \textbf{Main optical RAM}: Bulk weight storage using Kerr-effect memory
 \end{itemize}
 
-Write time is approximately 10 ns per trit. No refresh is required (unlike DRAM)—weights persist until explicitly overwritten.
+Weights stream from the appropriate RAM tier to PEs via dedicated waveguide channels. This ``weight streaming'' approach mirrors how modern GPUs fetch weights from HBM rather than storing them in register files.
+
+\subsubsection{Fabrication Advantages}
+
+This architectural choice yields significant practical benefits:
+
+\begin{itemize}
+\item \textbf{Simpler PEs}: Each PE is just an SFG mixer plus waveguide routing---no exotic tristable storage required
+\item \textbf{Higher yield}: Fewer complex components per PE means fewer failure points
+\item \textbf{Unified memory}: The CPU's optical RAM serves double duty as accelerator weight storage
+\item \textbf{Flexibility}: Weight patterns can change dynamically without PE reprogramming
+\end{itemize}
+
+The trade-off is increased waveguide routing complexity, but modern silicon photonics can handle the required channel density.
 
 \subsection{PE Types and Operations}
 
@@ -167,7 +182,7 @@ Exponentiation becomes addition. Each additional log level converts a harder ope
 
 \subsection{3\textsuperscript{3} Encoding}
 
-Rather than adding hardware complexity, we increase effective throughput by having the IOC \textbf{reinterpret} what each trit represents:
+Rather than adding hardware complexity, we increase effective throughput by having the NR-IOC \textbf{reinterpret} what each trit represents:
 
 \begin{table}[H]
 \centering
@@ -183,7 +198,7 @@ Rather than adding hardware complexity, we increase effective throughput by havi
 \end{tabular}
 \end{table}
 
-The optical hardware remains identical—3 physical states, 3 wavelengths. The IOC handles encoding/decoding at the boundary.
+The optical hardware remains identical—3 physical states, 3 wavelengths. The NR-IOC handles encoding/decoding at the boundary.
 
 \subsection{Practical Implementation}
 
@@ -194,7 +209,7 @@ Both ADD/SUB and MUL/DIV PEs use \textbf{3\textsuperscript{3} encoding}:
 \item MUL/DIV PEs: trit$^3$ represents multiplication values (in log domain)
 \end{itemize}
 
-The IOC knows which PE type it addresses and applies the correct interpretation.
+The NR-IOC knows which PE type it addresses and applies the correct interpretation.
 
 \subsection{Why 3\textsuperscript{3}\textsuperscript{3}\textsuperscript{3} Is Beyond Engineering}
 
@@ -320,11 +335,11 @@ Optical 960$\times$960 (Pure ADD) & 738 PFLOPS & 2 chips \\
 
 The ``2 chips = Frontier'' claim is accurate \textbf{only for pure ADD workloads}. For matrix multiplication (realistic AI training/inference), it is \textbf{8 chips = Frontier}. Both are remarkable—8 chips vs. 9,402 nodes is a 1,175$\times$ reduction in system complexity.
 
-\section{Input/Output Converter (IOC)}
+\section{N-Radix Input/Output Converter (NR-IOC)}
 
 \subsection{Function}
 
-The IOC bridges binary electronic systems (PCIe, host CPU) with the optical ternary chip:
+The NR-IOC bridges binary electronic systems (PCIe, host CPU) with the optical ternary chip:
 
 \begin{enumerate}
 \item \textbf{Encode}: Binary $\rightarrow$ balanced ternary $\rightarrow$ optical wavelengths
@@ -334,14 +349,14 @@ The IOC bridges binary electronic systems (PCIe, host CPU) with the optical tern
 
 \subsection{Timing}
 
-IOC conversion time is approximately \textbf{6.5 ns}—negligible compared to PCIe transfer latency ($\sim$1 $\mu$s per KB) and compute time.
+NR-IOC conversion time is approximately \textbf{6.5 ns}—negligible compared to PCIe transfer latency ($\sim$1 $\mu$s per KB) and compute time.
 
-\subsection{The IOC as the Scaling Limit}
+\subsection{The NR-IOC as the Scaling Limit}
 
 The optical hardware is unlimited—it simply adds wavelengths regardless of what they represent. The practical ceiling for tower scaling is determined by:
 
 \begin{enumerate}
-\item \textbf{IOC precision}: How many tower levels can be accurately encoded/decoded
+\item \textbf{NR-IOC precision}: How many tower levels can be accurately encoded/decoded
 \item \textbf{Transistor interface}: PCIe bandwidth and host CPU capabilities
 \end{enumerate}
 
@@ -399,7 +414,7 @@ We have presented the N-Radix architecture, extending wavelength-division ternar
 \item \textbf{Systolic array architecture}: Identical topology to proven designs (Google TPU, NVIDIA tensor cores), but with optical ternary PEs
 \item \textbf{Log-domain tower scaling}: 3\textsuperscript{3} encoding yields 9$\times$ throughput for pure ADD operations, $\sim$1.8$\times$ for matrix multiply (via Amdahl's Law on the 50/50 ADD/MUL split)
 \item \textbf{Practical limits identified}: 3\textsuperscript{3}\textsuperscript{3}\textsuperscript{3} requires 12 terabit registers—beyond physical realizability
-\item \textbf{IOC as the true ceiling}: The optical hardware is unlimited; scaling is bounded by electronic interface precision
+\item \textbf{NR-IOC as the true ceiling}: The optical hardware is unlimited; scaling is bounded by electronic interface precision
 \item \textbf{Honest performance claims}: 8 chips match Frontier for matrix multiply; 2 chips match Frontier only for pure ADD workloads
 \end{enumerate}
 
@@ -420,6 +435,9 @@ Claude (Anthropic) provided assistance with architectural documentation and perf
 
 \bibitem{riner2026wavelength}
 C. Riner, ``Wavelength-Division Ternary Logic: Bypassing the Radix Economy Penalty in Optical Computing,'' Zenodo, Jan. 2026. DOI: 10.5281/zenodo.18437600
+
+\bibitem{riner2026software}
+C. Riner, ``Wavelength-Division Ternary Optical Computer,'' Zenodo, Feb. 2026. Software. DOI: 10.5281/zenodo.14797981
 
 \bibitem{knuth1981}
 D. E. Knuth, \emph{The Art of Computer Programming, Volume 2: Seminumerical Algorithms}, 2nd ed. Addison-Wesley, 1981.

@@ -90,35 +90,109 @@ The wavelength separation is sufficient that standard WDM multiplexers/demultipl
 
 ---
 
-## How Weights Are Stored: Bistable Kerr Flip-Flops
+## How Weights Are Stored: Centralized Optical RAM
 
-Each Processing Element (PE) contains a **9-trit weight register** built from bistable Kerr resonators. Here's how it works:
+Weights are stored in the **CPU's 3-tier optical RAM** and streamed to Processing Elements (PEs) via optical waveguides. This is a critical architectural simplification over earlier designs that attempted per-PE weight storage using exotic bistable resonators.
 
-### The Mechanism
+### The Architecture
 
-A Kerr resonator exploits the optical Kerr effect (χ³ nonlinearity) where the refractive index changes with light intensity. At the right power levels, the resonator has **two stable states** - it "locks" into one or the other based on input.
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     CPU's Optical RAM                           │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐             │
+│  │   Tier 1    │  │   Tier 2    │  │   Tier 3    │             │
+│  │  Hot Cache  │  │   Working   │  │   Parking   │             │
+│  │    ~1ns     │  │   ~10ns     │  │   ~100ns    │             │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘             │
+│         └────────────────┼────────────────┘                     │
+│                          ↓                                      │
+│              ┌───────────────────────┐                          │
+│              │   Weight Streaming    │                          │
+│              │      Controller       │                          │
+│              └───────────┬───────────┘                          │
+└──────────────────────────┼──────────────────────────────────────┘
+                           ↓
+              Optical Waveguide Bus (weight stream)
+                           ↓
+┌──────────────────────────────────────────────────────────────────┐
+│                     Systolic Array                               │
+│   ┌────┐  ┌────┐  ┌────┐       Weights stream in from RAM       │
+│   │ PE │→ │ PE │→ │ PE │→      PEs are SIMPLE: mixer + routing  │
+│   └─┬──┘  └─┬──┘  └─┬──┘       No per-PE storage needed         │
+│     ↓       ↓       ↓                                            │
+│   ┌────┐  ┌────┐  ┌────┐                                        │
+│   │ PE │→ │ PE │→ │ PE │→                                       │
+│   └─┬──┘  └─┬──┘  └─┬──┘                                        │
+│     ↓       ↓       ↓                                            │
+└──────────────────────────────────────────────────────────────────┘
+```
 
-For ternary storage, each trit uses **wavelength presence** to encode three states:
+### The 3-Tier Memory Hierarchy
 
-| Stored Value | Wavelength Present | Physical State |
-|--------------|-------------------|----------------|
-| **-1** | 1550nm (Red) | Resonator locked to λ_red |
-| **0** | 1310nm (Green) | Resonator locked to λ_green |
-| **+1** | 1064nm (Blue) | Resonator locked to λ_blue |
+| Tier | Name | Access Time | Purpose |
+|------|------|-------------|---------|
+| **Tier 1** | Hot Cache | ~1ns | Active weights currently in use |
+| **Tier 2** | Working Set | ~10ns | Layer weights, near-term access |
+| **Tier 3** | Parking | ~100ns | Full model storage, bulk weights |
 
-### Writing a Weight (Setting the Flip-Flop)
+Weights move between tiers based on access patterns. Hot weights for the current compute operation sit in Tier 1, ready for immediate streaming to PEs.
 
-To write a value to a PE's weight register:
+### Simplified PE Design
 
-1. **Assert the WRITE_ENABLE line** for that PE (optical pulse on the write bus)
-2. **Inject the desired wavelength** at high power (above bistability threshold)
-3. **Remove WRITE_ENABLE** - the resonator stays locked to that wavelength
+Each PE is now remarkably simple:
 
-The write operation takes ~10ns (a few clock cycles at 617 MHz).
+```
+          Input activation (streaming)
+                    ↓
+    ┌───────────────────────────────┐
+    │              PE               │
+    │                               │
+    │   Weight (streamed in) ──────┼──→ from optical RAM
+    │              ↓                │
+    │         SFG Mixer             │
+    │    (input × weight = output)  │
+    │              ↓                │
+    │      Waveguide Routing        │
+    │              ↓                │
+    └───────────────────────────────┘
+                    ↓
+           Output (to next PE)
+```
 
-### Example: Loading a 3×3 Weight Matrix
+**What a PE contains:**
+- SFG mixer (sum-frequency generation for ternary multiply)
+- Waveguide routing (input/output/weight paths)
 
-Say we want to load this weight matrix into a 3×3 section of the systolic array:
+**What a PE does NOT contain:**
+- Bistable resonators
+- Tristable flip-flops
+- Any per-PE weight storage
+- Complex nonlinear optical elements
+
+### Why This Is Better
+
+| Aspect | Old Design (Per-PE Storage) | New Design (Centralized RAM) |
+|--------|----------------------------|------------------------------|
+| PE complexity | Bistable Kerr resonators per PE | Just mixer + waveguides |
+| Fabrication | Every PE must have working resonator | PEs are mostly passive optics |
+| Yield | One bad resonator = bad PE | Much higher yield |
+| Weight loading | Write to each PE individually | Stream from RAM |
+| Memory system | Separate accelerator storage | Shared with CPU |
+| Exotic components | Per-PE χ³ nonlinear elements | Centralized, amortized |
+
+### Weight Streaming During Compute
+
+During matrix operations, weights stream from optical RAM to PEs in sync with the systolic data flow:
+
+1. **Weights pre-staged in Tier 1** - Controller prefetches needed weights
+2. **Streaming to PEs** - Weights flow via optical waveguides, timed to arrive with activations
+3. **Continuous flow** - As one weight is consumed, next weight arrives
+
+The streaming approach means weights don't need to "persist" at the PE - they're consumed immediately and replaced by the next weight in the stream.
+
+### Example: Matrix Multiply Weight Flow
+
+For a 3×3 weight matrix:
 
 ```
 W = | +1  -1   0 |
@@ -126,66 +200,32 @@ W = | +1  -1   0 |
     | -1   0  -1 |
 ```
 
-**Step 1: Address the PEs**
+**Cycle 1:** Row 0 weights stream to PE row 0 (1064nm, 1550nm, 1310nm)
+**Cycle 2:** Row 1 weights stream to PE row 1 (1310nm, 1064nm, 1064nm)
+**Cycle 3:** Row 2 weights stream to PE row 2 (1550nm, 1310nm, 1550nm)
 
-The weight loading bus addresses PEs row by row:
-```
-Clock 1: Select Row 0 (PE[0,0], PE[0,1], PE[0,2])
-Clock 2: Select Row 1 (PE[1,0], PE[1,1], PE[1,2])
-Clock 3: Select Row 2 (PE[2,0], PE[2,1], PE[2,2])
-```
+Weights arrive just-in-time, synchronized with the systolic data flow. The RAM controller handles prefetching and timing.
 
-**Step 2: Inject wavelengths for each row**
+### Dual-Purpose Memory System
 
-```
-Clock 1, Row 0: Inject 1064nm → PE[0,0]  (+1)
-                Inject 1550nm → PE[0,1]  (-1)
-                Inject 1310nm → PE[0,2]  (0)
+The optical RAM serves **both** the CPU and accelerator:
 
-Clock 2, Row 1: Inject 1310nm → PE[1,0]  (0)
-                Inject 1064nm → PE[1,1]  (+1)
-                Inject 1064nm → PE[1,2]  (+1)
+| Use Case | How RAM Is Used |
+|----------|-----------------|
+| CPU operations | Normal data/instruction storage |
+| Accelerator weights | Weight streaming to systolic array |
 
-Clock 3, Row 2: Inject 1550nm → PE[2,0]  (-1)
-                Inject 1310nm → PE[2,1]  (0)
-                Inject 1550nm → PE[2,2]  (-1)
-```
+One memory system, two purposes. The CPU's optical RAM isn't dedicated to either - it's a shared resource that serves whatever needs data at the moment.
 
-**Total load time for 3×3:** 3 clock cycles = ~4.9ns
+### Latency Considerations
 
-**For an 81×81 array:** 81 clock cycles = ~131ns (~0.13μs)
+| Operation | Latency | Notes |
+|-----------|---------|-------|
+| Tier 1 → PE stream | ~1ns | Hot cache, immediate |
+| Tier 2 → Tier 1 prefetch | ~10ns | Background, overlapped with compute |
+| Tier 3 → Tier 2 load | ~100ns | Bulk model loading |
 
-### Reading the Weight (During Compute)
-
-During matrix operations, each PE continuously outputs its stored wavelength at low power. The mixer combines this with the streaming input:
-
-```
-          Input activation (streaming)
-                    ↓
-    ┌───────────────────────────────┐
-    │              PE               │
-    │   ┌───────────────────────┐   │
-    │   │  Kerr Bistable Cell   │   │
-    │   │  (stores weight λ)    │───┼──→ Weight wavelength (continuous)
-    │   └───────────────────────┘   │
-    │              ↓                │
-    │         SFG Mixer             │
-    │    (input × weight = output)  │
-    │              ↓                │
-    └───────────────────────────────┘
-                    ↓
-           Output (to next PE)
-```
-
-The weight doesn't need to be "read" in a traditional sense - it's always present, always mixing with the input stream. This is why systolic arrays are so efficient: **weights are stationary, data flows through**.
-
-### Persistence
-
-Bistable Kerr resonators maintain their state indefinitely as long as:
-- Minimum holding power is maintained (~1mW)
-- No write pulse is applied
-
-No refresh cycles needed (unlike DRAM). Weights persist until explicitly overwritten.
+For sustained compute, weights are prefetched into Tier 1 ahead of when they're needed. The ~1ns streaming latency is negligible compared to the 617 MHz clock period (~1.6ns).
 
 ---
 

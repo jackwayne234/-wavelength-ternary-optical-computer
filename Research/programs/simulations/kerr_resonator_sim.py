@@ -1,11 +1,38 @@
 #!/usr/bin/env python3
 """
-Kerr Resonator Simulation for Optical Clock
+Kerr Resonator Simulation for 617 MHz Optical Clock Generation
 
 FDTD simulation of ring resonator with Kerr nonlinearity for self-pulsing
-optical clock generation. Critical for timing in the ternary optical computer.
+optical clock generation.
 
-Usage:
+=== ARCHITECTURAL ROLE ===
+
+This simulation is for the CENTRAL KERR CLOCK - the master timing source
+positioned at the exact center of the systolic array for minimal clock skew.
+
+  - Target frequency: 617 MHz (word rate for ternary operations)
+  - Location: Array center (equidistant to all PEs for symmetric timing)
+  - Function: Generates synchronized clock pulses via Kerr self-pulsing
+
+=== NOT FOR WEIGHT STORAGE ===
+
+IMPORTANT: The Kerr resonator is NO LONGER used for per-PE weight storage.
+
+Previous architecture (deprecated):
+  - Bistable/tristable Kerr resonators at each PE for weight storage
+  - Required high-Q cavities and complex state management
+
+Current architecture (BREAKTHROUGH):
+  - Weights stored in optical RAM (separate memory subsystem)
+  - Weights streamed to PEs via WDM channels during computation
+  - PEs are stateless - they receive weights, perform MAC, output result
+  - This dramatically simplifies PE design and improves scalability
+
+The Kerr resonator research remains valuable for clock generation, where
+self-pulsing behavior provides a stable, optically-native timing source.
+
+=== USAGE ===
+
     python kerr_resonator_sim.py                     # Default simulation
     python kerr_resonator_sim.py --radius 10         # Specific radius
     python kerr_resonator_sim.py --sweep-power       # Power sweep for bistability
@@ -19,23 +46,33 @@ import meep as mp
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Target clock frequency
+# Target clock frequency for the central Kerr clock
+# This clock is positioned at array center for symmetric distribution to all PEs
+# 617 MHz = one ternary word (trit-triplet) per 1.62ns
 TARGET_CLOCK_FREQ = 617e6  # 617 MHz word rate
 
 
 def run_kerr_resonator(wavelength: float = 1.55, radius: float = 10.0,
                        chi3: float = 1e-3, resolution: int = 30):
     """
-    Simulate Kerr ring resonator.
+    Simulate Kerr ring resonator for clock generation research.
+
+    This characterizes the resonator properties needed for self-pulsing clock
+    generation at 617 MHz. The Kerr nonlinearity enables optical bistability
+    and self-pulsing behavior when driven above threshold.
+
+    Note: This is for CLOCK generation only. Weight storage now uses optical
+    RAM with streaming to PEs, not per-PE Kerr resonators.
 
     Args:
-        wavelength: Operating wavelength (μm)
-        radius: Ring radius (μm)
+        wavelength: Operating wavelength (μm), typically 1.55 for C-band
+        radius: Ring radius (μm) - affects FSR and pulsing frequency
         chi3: Third-order susceptibility (Kerr coefficient)
         resolution: FDTD resolution (pixels/μm)
 
     Returns:
-        dict with resonance properties, Q factor, Kerr shift
+        dict with resonance properties, Q factor, Kerr shift - key parameters
+        for designing a 617 MHz self-pulsing clock source
     """
     print(f"\n--- KERR RESONATOR SIMULATION ---")
     print(f"Wavelength: {wavelength} μm, Radius: {radius} μm")
@@ -251,7 +288,13 @@ def run_kerr_resonator(wavelength: float = 1.55, radius: float = 10.0,
 def run_power_sweep(wavelength: float = 1.55, radius: float = 10.0,
                     chi3_values: list = None):
     """
-    Sweep Kerr coefficient (equivalent to power sweep) for bistability analysis.
+    Sweep Kerr coefficient (equivalent to power sweep) for clock threshold analysis.
+
+    This helps identify the chi3/power threshold needed for the clock to enter
+    self-pulsing mode. Below threshold: linear response. Above threshold: bistability
+    and self-oscillation at a frequency determined by cavity parameters.
+
+    Used to design the 617 MHz Kerr clock at array center.
     """
     if chi3_values is None:
         chi3_values = [0, 1e-4, 5e-4, 1e-3, 5e-3, 1e-2]
@@ -275,7 +318,17 @@ def run_time_domain_simulation(wavelength: float = 1.55, radius: float = 10.0,
                                chi3: float = 1e-2, duration: float = 500.0,
                                resolution: int = 30):
     """
-    Run time-domain simulation to observe self-pulsing dynamics.
+    Run time-domain simulation to observe self-pulsing clock dynamics.
+
+    This is the key simulation for clock design - it shows the actual pulsing
+    behavior over time. The goal is to achieve stable 617 MHz self-pulsing
+    that can serve as the master clock for the entire systolic array.
+
+    The clock is positioned at array center to minimize skew to all PEs.
+    Self-pulsing is preferred over external modulation because:
+    - All-optical (no E/O conversion)
+    - Intrinsically stable (cavity physics sets frequency)
+    - Naturally produces sharp clock edges
     """
     print(f"\n--- TIME-DOMAIN KERR RESONATOR ---")
     print(f"Duration: {duration} Meep time units")
@@ -521,9 +574,11 @@ def main():
 
     print("=" * 60)
     print("  KERR RESONATOR - Meep FDTD Simulation")
-    print("  Optical Clock for Ternary Computer")
+    print("  Central Optical Clock for Ternary Systolic Array")
     print("=" * 60)
-    print(f"  Target clock: {TARGET_CLOCK_FREQ/1e6:.0f} MHz")
+    print(f"  Target clock: {TARGET_CLOCK_FREQ/1e6:.0f} MHz (word rate)")
+    print(f"  Location: Array center (minimal skew to all PEs)")
+    print(f"  Note: Clock generation only - weights use optical RAM")
 
     if args.sweep_power:
         result = run_power_sweep(args.wavelength, args.radius)

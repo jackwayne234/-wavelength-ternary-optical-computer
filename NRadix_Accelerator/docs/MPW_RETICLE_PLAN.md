@@ -71,17 +71,20 @@ Dimensions: 1650 x 1650 um (1.65 x 1.65 mm)
 Area: 2.72 mm^2
 
 Based on:
-- PE size: 50 x 50 um
+- PE size: 50 x 50 um (SIMPLE: mixer + routing only)
 - PE spacing: 5 um
 - PE pitch: 55 um
 - Array: 27 x 27 = 729 PEs
 - Dimensions: (27 * 55) + margins = ~1650 um
 
 Components:
-- 729 Processing Elements (multi-domain support)
-- Weight loading bus
+- 729 Processing Elements (mixer + routing, NO per-PE weight storage)
+- Weight streaming bus (weights from optical RAM)
 - Activation I/O buffers
 - Clock distribution (center-out radial)
+
+Note: Weights stored in optical RAM (CPU's 3-tier memory) and STREAMED to PEs.
+This simplifies PE design dramatically - higher yield, easier fabrication.
 
 Purpose: AI acceleration prototype, matrix multiply verification
 ```
@@ -110,15 +113,18 @@ Area: 22.1 mm^2
 
 Based on:
 - PE pitch: 55 um
-- Array: 81 x 81 = 6,561 PEs
+- Array: 81 x 81 = 6,561 PEs (SIMPLE: mixer + routing only)
 - Array core: 81 * 55 = 4455 um
 - With I/O buffers and margins: ~4700 um
 
 Components:
-- 6,561 Processing Elements
+- 6,561 Processing Elements (mixer + routing, NO per-PE weight storage)
 - LINEAR/LOG/LOG-LOG mode support
-- Weight-stationary architecture
+- Weight STREAMING architecture (weights from optical RAM, not per-PE)
 - 617 MHz clock distribution
+
+Fabrication advantage: Simple PEs = higher yield. Complex memory is
+centralized in optical RAM, not distributed across 6,561 PEs.
 
 Purpose: Maximum AI acceleration, 4.05 TMAC/s target
 ```

@@ -91,8 +91,8 @@ chmod +x *.sh
 
 This will:
 - Install Miniconda
-- Create a Python 3.12 environment with Meep
-- Configure OpenMP threading
+- Create a Python 3.12 environment with MPI-enabled Meep
+- Install mpi4py and mpich for parallel execution
 
 ### 4. Run the Simulation
 
@@ -152,6 +152,39 @@ After successful completion, you'll find in `~/nradix_simulations/results/run_<t
 | `wdm_81x81_array_results.txt` | Detailed numerical results |
 | `wdm_81x81_*.log` | Simulation log with timing info |
 
+## IMPORTANT: MPI vs OpenMP (Parallelism)
+
+**The default `conda install pymeep` installs the `nompi` build which is SINGLE-THREADED.**
+
+Setting `OMP_NUM_THREADS` does NOTHING with the nompi build. You MUST install the MPI version for multi-core parallelism.
+
+### Quick Check: Is My Meep Parallel?
+
+```bash
+# Check which build you have
+conda list pymeep
+# Look for "mpi_mpich" in the build string - if you see "nompi", it's single-threaded!
+
+# Correct output example:
+# pymeep    1.31.0    mpi_mpich_py312h639cf41_0    conda-forge
+```
+
+### Installing MPI-Enabled Meep
+
+```bash
+conda install -c conda-forge pymeep=*=mpi_mpich* mpi4py mpich
+```
+
+### Running with MPI
+
+```bash
+# Use mpirun, not just python
+mpirun -np 32 python simulation.py
+
+# Or specify number of cores dynamically
+mpirun -np $(nproc) python simulation.py
+```
+
 ## Troubleshooting
 
 ### Out of Memory
@@ -176,12 +209,24 @@ conda activate meep_env
 conda install -c conda-forge pymeep --force-reinstall
 ```
 
-### Slow Performance
+### Slow Performance (Only Using 1 Core)
 
-Check that OpenMP is using all cores:
+Check that you have the MPI build installed:
 ```bash
-echo $OMP_NUM_THREADS
-# Should match: nproc
+conda list pymeep
+# Should show "mpi_mpich" in the build string, NOT "nompi"
+
+# If it shows nompi, reinstall with MPI:
+conda install -c conda-forge pymeep=*=mpi_mpich* mpi4py mpich --force-reinstall
+```
+
+Make sure you're running with `mpirun`:
+```bash
+# WRONG - runs single-threaded even with MPI build
+python simulation.py
+
+# CORRECT - uses all cores
+mpirun -np $(nproc) python simulation.py
 ```
 
 ### SSH Connection Timeout
@@ -211,12 +256,12 @@ Host *
 
 Python 3.13 has compatibility issues with some Meep dependencies. Python 3.12 is the sweet spot for stability.
 
-### Why OpenMP instead of MPI?
+### Why MPI (not OpenMP)?
 
-- Simpler setup (no MPI configuration needed)
-- Better for single-node simulations
-- MPI requires mpi4py which has additional dependencies
-- For 81x81, single-node with many threads is sufficient
+- **The default pymeep is single-threaded!** The `nompi` conda build ignores `OMP_NUM_THREADS` entirely.
+- MPI is required for any multi-core parallelism in Meep.
+- Setup is straightforward: just install the MPI build and use `mpirun`.
+- The setup script handles this automatically.
 
 ### Memory Estimation
 
@@ -225,6 +270,22 @@ Approximate memory usage:
 - 81x81 array: ~24-32GB
 - Resolution 20: baseline
 - Resolution 30: ~2.25x more memory
+
+### MPI Scaling Notes
+
+- With MPI, use all available cores: `mpirun -np 64 python simulation.py`
+- Scaling is NOT perfectly linear due to MPI communication overhead
+- 64 cores gives roughly 1.5-1.7x speedup over 32 cores (not 2x)
+- Sweet spot for 81x81 simulation: 32-64 cores
+- Beyond 128 cores, diminishing returns - communication overhead dominates
+- Larger simulations (960x960) would benefit from more cores
+
+**64-core AWS options:**
+
+| Instance | vCPUs | RAM | Cost/hr |
+|----------|-------|-----|---------|
+| c6i.16xlarge | 64 | 128GB | ~$2.72 |
+| c7i.16xlarge | 64 | 128GB | ~$2.86 |
 
 ## Support
 

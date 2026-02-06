@@ -14,6 +14,7 @@ This document specifies the packaging requirements for the N-Radix ternary optic
 **Chip Function:** 81-trit optical ALU (ternary arithmetic logic unit)
 **Technology:** Silicon photonics with χ² nonlinear mixing
 **Interface:** Optical input, electrical output
+**Architecture:** Simple PEs (mixer + routing) with weights STREAMED from optical RAM
 
 ---
 

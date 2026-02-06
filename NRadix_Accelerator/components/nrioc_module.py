@@ -1,13 +1,49 @@
 #!/usr/bin/env python3
 """
-IOC (Input/Output Converter) Module for Ternary Optical Computer
+NRIOC (N-Radix Input/Output Converter) Module for Ternary Optical Computer
 
 Bridges electronic and optical domains for the 81-trit ternary optical computer.
+
+=============================================================================
+ARCHITECTURE: STREAMING WEIGHTS FROM OPTICAL RAM
+=============================================================================
+
+BREAKTHROUGH INSIGHT (Feb 2026):
+    Weights are stored in the CPU's 3-tier optical RAM system, NOT in per-PE
+    bistable Kerr resonators. This fundamentally simplifies PE design.
+
+    OLD APPROACH (abandoned):
+        - Each PE had its own bistable/tristable Kerr resonator for weight storage
+        - Required exotic per-PE storage elements
+        - Complex fabrication, lower yield
+        - Each PE was a complex stateful element
+
+    NEW APPROACH (current):
+        - PEs are SIMPLE: just SFG mixer + waveguide routing
+        - Weights STREAM from optical RAM tiers as inputs
+        - No per-PE storage needed
+        - Higher fabrication yield
+        - PEs become commodity routing + mixing elements
+
+WEIGHT FLOW:
+    [Optical RAM Tiers] --> [Weight Stream] --> [PE Input Port]
+                                                      |
+    [Activation Stream] ----------------------> [PE Input Port]
+                                                      |
+                                               [SFG Mixer]
+                                                      |
+                                               [Output Stream]
+
+RAM TIER HIERARCHY (weight source):
+    Tier 1 (Hot Register):     ~1 ns access, accumulator-speed
+    Tier 2 (Working Register): ~10 ns access, pulsed SOA refresh
+    Tier 3 (Parking Register): ~100 ns access, 32-register addressed
 
 Functions:
 1. ENCODE: Electronic ternary values -> RGB wavelength-encoded optical signals
 2. DECODE: 5-level photodetector outputs -> electronic ternary values + carry
 3. BUFFER/SYNC: Handle timing between fast optical ALU (~1.6ns) and electronic control
+4. RAM TIER ADAPTERS: Interface to optical RAM for weight streaming
 
 Specifications:
 - Power Budget:
@@ -22,6 +58,12 @@ Specifications:
   - Decode latency: ~1.2 ns
   - FIFO latency: 1.6-6.5 ns (configurable)
   - Compatible with 20 ps inter-trit, 617 MHz word rate
+
+PE Simplification Benefits:
+  - No exotic tristable storage per PE
+  - Standard waveguide + mixer fabrication
+  - Higher yield, lower cost
+  - Weights supplied externally from RAM tiers
 
 Author: Wavelength-Division Ternary Optical Computer Project
 """
@@ -945,7 +987,24 @@ def ioc_shift_register_81trit() -> Component:
 
 
 # =============================================================================
-# RAM TIER ADAPTERS
+# RAM TIER ADAPTERS - WEIGHT STREAMING SOURCE
+# =============================================================================
+#
+# These adapters interface with the CPU's 3-tier optical RAM system.
+# CRITICAL: Weights stream FROM these tiers TO the PEs as inputs.
+#
+# The PE simplification comes from this architecture:
+#   - PEs do NOT store weights internally
+#   - PEs are simple: SFG mixer + waveguide routing
+#   - Weights arrive as streaming optical inputs from RAM tiers
+#   - This eliminates need for exotic per-PE tristable storage
+#
+# Benefits:
+#   - Higher fabrication yield (no complex per-PE storage)
+#   - Simpler PE design (just mixer + routing)
+#   - Centralized weight management in RAM tiers
+#   - Easier debugging and characterization
+#
 # =============================================================================
 
 @gf.cell
@@ -953,8 +1012,16 @@ def tier1_adapter() -> Component:
     """
     Tier 1 (Hot Register) adapter - optical-only interface.
 
+    ROLE IN STREAMING ARCHITECTURE:
+        Provides lowest-latency weight streaming for accumulator-speed
+        operations. Weights flow directly from hot registers to PE inputs.
+
     Direct optical passthrough with MZI register select.
     Minimal latency for accumulator operations.
+
+    PE Integration:
+        tier1_adapter.read_a --> PE.weight_input (streaming)
+        tier1_adapter.read_b --> PE.weight_input (alternate)
 
     Size: ~60 x 40 um
     """
@@ -982,7 +1049,16 @@ def tier2_adapter() -> Component:
     """
     Tier 2 (Working Register) adapter - optical + SOA gate timing.
 
+    ROLE IN STREAMING ARCHITECTURE:
+        Provides working-speed weight streaming with SOA-gated refresh.
+        Weights stream from working registers to PE inputs with ~10ns latency.
+
     Adds SOA gate control for pulsed refresh timing.
+
+    PE Integration:
+        tier2_adapter.read_a --> PE.weight_input (streaming)
+        tier2_adapter.read_b --> PE.weight_input (alternate)
+        SOA gate controls weight update timing
 
     Size: ~100 x 60 um
     """
@@ -1040,7 +1116,16 @@ def tier3_adapter() -> Component:
     """
     Tier 3 (Parking Register) adapter - electrical address + optical data.
 
+    ROLE IN STREAMING ARCHITECTURE:
+        Provides bulk weight storage with addressed access. Weights are
+        loaded from parking registers into working/hot registers for
+        streaming to PEs. ~100ns access latency.
+
     5-bit address decoder for 32 registers + optical data interface.
+
+    PE Integration:
+        tier3_adapter.data_out --> tier2/tier1 --> PE.weight_input
+        Used for initial weight loading and weight swapping
 
     Size: ~120 x 80 um
     """
@@ -1104,6 +1189,181 @@ def tier3_adapter() -> Component:
 
 
 # =============================================================================
+# SIMPLIFIED PE INTERFACE - STREAMING WEIGHT ARCHITECTURE
+# =============================================================================
+#
+# This section documents the PE integration with the streaming weight system.
+# PEs do NOT store weights internally - they receive weights as streaming inputs.
+#
+# PE ARCHITECTURE (simplified):
+#   +------------------------------------------+
+#   |                                          |
+#   |   [Weight Stream In] ----+               |
+#   |                          |               |
+#   |                     [SFG Mixer]          |
+#   |                          |               |
+#   |   [Activation In] -------+               |
+#   |                          |               |
+#   |                    [Output Stream]       |
+#   |                          |               |
+#   +------------------------------------------+
+#
+# That's it. No bistable storage. No exotic materials. Just:
+#   1. Weight input port (from RAM tier adapters)
+#   2. Activation input port (from previous PE or input)
+#   3. SFG mixer (the actual computation)
+#   4. Output port (to next PE or output)
+#
+# FABRICATION BENEFITS:
+#   - Standard silicon photonics process
+#   - No per-PE tristable elements required
+#   - Higher yield (simpler structures)
+#   - Easier testing and characterization
+#   - Lower cost per PE
+#
+# =============================================================================
+
+@gf.cell
+def pe_weight_interface(pe_id: int = 0) -> Component:
+    """
+    PE weight streaming interface - connects RAM tier adapters to PE inputs.
+
+    This interface shows how weights flow FROM the optical RAM tiers
+    TO the Processing Elements. The PE itself is simple - just an SFG
+    mixer with waveguide routing. All the complexity is in the RAM tiers.
+
+    CRITICAL INSIGHT:
+        Old architecture: PE = mixer + internal weight storage (complex)
+        New architecture: PE = mixer only, weights stream in (simple)
+
+    The PE weight interface provides:
+        - Weight input port (connects to RAM tier output)
+        - Timing synchronization with Kerr clock
+        - Wavelength routing for proper mixing
+
+    Args:
+        pe_id: Processing Element identifier for labeling
+
+    Returns:
+        Component with weight streaming interface ports
+    """
+    c = gf.Component()
+
+    # Weight input waveguide (from RAM tier adapters)
+    weight_wg = c << gf.components.straight(length=30, width=WAVEGUIDE_WIDTH)
+    weight_wg.dmove((0, 20))
+
+    # Activation input waveguide (from previous PE or input)
+    activation_wg = c << gf.components.straight(length=30, width=WAVEGUIDE_WIDTH)
+    activation_wg.dmove((0, 0))
+
+    # Y-junction combiner (combines weight + activation for SFG mixer)
+    combiner = c << gf.components.mmi2x2()
+    combiner.dmove((35, 10))
+
+    # Output waveguide (to next PE)
+    output_wg = c << gf.components.straight(length=20, width=WAVEGUIDE_WIDTH)
+    output_wg.dmove((80, 10))
+
+    # Labels
+    c.add_label(f"PE{pe_id}", position=(55, 35), layer=LAYER_TEXT)
+    c.add_label("WEIGHT_IN", position=(15, 25), layer=LAYER_TEXT)
+    c.add_label("ACT_IN", position=(15, -5), layer=LAYER_TEXT)
+    c.add_label("OUT", position=(90, 15), layer=LAYER_TEXT)
+    c.add_label("STREAMING", position=(55, -15), layer=LAYER_TEXT)
+
+    # Ports
+    c.add_port(
+        name="weight_in",
+        center=(0, 20 + WAVEGUIDE_WIDTH/2),
+        width=WAVEGUIDE_WIDTH,
+        orientation=180,
+        layer=LAYER_WAVEGUIDE
+    )
+    c.add_port(
+        name="activation_in",
+        center=(0, WAVEGUIDE_WIDTH/2),
+        width=WAVEGUIDE_WIDTH,
+        orientation=180,
+        layer=LAYER_WAVEGUIDE
+    )
+    c.add_port(
+        name="output",
+        center=(100, 10 + WAVEGUIDE_WIDTH/2),
+        width=WAVEGUIDE_WIDTH,
+        orientation=0,
+        layer=LAYER_WAVEGUIDE
+    )
+
+    return c
+
+
+@gf.cell
+def weight_streaming_bus(n_channels: int = 4) -> Component:
+    """
+    Multi-channel weight streaming bus from RAM tiers to PE array.
+
+    This bus distributes weights from the 3-tier optical RAM to multiple
+    PEs simultaneously. Each channel carries one weight stream.
+
+    Architecture:
+        [Tier 1/2/3 Adapters] --> [Weight Bus] --> [PE Array]
+
+    The bus handles:
+        - Wavelength routing (each weight encoded as wavelength)
+        - Fan-out to multiple PEs
+        - Timing alignment with Kerr clock
+
+    Args:
+        n_channels: Number of parallel weight channels
+
+    Returns:
+        Component with weight bus infrastructure
+    """
+    c = gf.Component()
+
+    channel_spacing = 15.0
+    bus_length = 100.0
+
+    # Main bus waveguide
+    for i in range(n_channels):
+        y_pos = i * channel_spacing
+
+        # Channel waveguide
+        wg = c << gf.components.straight(length=bus_length, width=WAVEGUIDE_WIDTH)
+        wg.dmove((0, y_pos))
+
+        # Channel label
+        c.add_label(f"W{i}", position=(-10, y_pos + 2), layer=LAYER_TEXT)
+
+        # Input port (from RAM tier)
+        c.add_port(
+            name=f"tier_in_{i}",
+            center=(0, y_pos + WAVEGUIDE_WIDTH/2),
+            width=WAVEGUIDE_WIDTH,
+            orientation=180,
+            layer=LAYER_WAVEGUIDE
+        )
+
+        # Output port (to PE)
+        c.add_port(
+            name=f"pe_out_{i}",
+            center=(bus_length, y_pos + WAVEGUIDE_WIDTH/2),
+            width=WAVEGUIDE_WIDTH,
+            orientation=0,
+            layer=LAYER_WAVEGUIDE
+        )
+
+    # Labels
+    total_height = (n_channels - 1) * channel_spacing
+    c.add_label("WEIGHT STREAMING BUS", position=(bus_length/2, total_height + 15), layer=LAYER_TEXT)
+    c.add_label("FROM RAM TIERS", position=(10, -15), layer=LAYER_TEXT)
+    c.add_label("TO PE ARRAY", position=(bus_length - 20, -15), layer=LAYER_TEXT)
+
+    return c
+
+
+# =============================================================================
 # COMPLETE IOC MODULE
 # =============================================================================
 
@@ -1114,13 +1374,27 @@ def ioc_module_complete(
     include_ioa_bus: bool = True
 ) -> Component:
     """
-    Complete IOC module assembly.
+    Complete NRIOC module assembly with streaming weight architecture.
+
+    STREAMING WEIGHT ARCHITECTURE:
+        This module implements the breakthrough insight that weights should
+        stream FROM optical RAM tiers TO simplified PEs, rather than being
+        stored in per-PE bistable resonators.
+
+        Weight Flow:
+            [RAM Tier Adapters] --> [Weight Stream] --> [Simplified PEs]
+
+        PE Simplification:
+            - PEs are just: SFG mixer + waveguide routing
+            - No per-PE tristable storage needed
+            - Higher fabrication yield
+            - Weights arrive as streaming inputs
 
     Integrates all IOC stages:
     - Encode stage (laser sources + MZI modulators + combiner)
     - Decode stage (AWG demux + photodetectors + encoder)
     - Buffer/Sync stage (timing sync + elastic FIFO + shift register)
-    - RAM tier adapters (Tier 1/2/3)
+    - RAM tier adapters (Tier 1/2/3) - WEIGHT SOURCE for PEs
     - IOA bus interface (optional, for external adapters)
 
     Size: ~800 x 400 um
@@ -1195,8 +1469,12 @@ def ioc_module_complete(
     # Connect timing to FIFO clock (electrical - shown as label connection)
     c.add_label("CLK_ROUTE", position=(115, -75), layer=LAYER_TEXT)
 
-    # === RAM TIER ADAPTERS ===
+    # === RAM TIER ADAPTERS (WEIGHT STREAMING SOURCE) ===
+    # These adapters are the SOURCE of weights for the PE array.
+    # Weights stream FROM these tiers TO the PEs as inputs.
+    # PEs are simplified: just mixer + routing, no internal storage.
     c.add_label("RAM ADAPTERS", position=(550, -30), layer=LAYER_TEXT)
+    c.add_label("(WEIGHT SOURCE)", position=(550, -45), layer=LAYER_TEXT)
 
     tier1 = c << tier1_adapter()
     tier1.dmove((500, -80))
@@ -1206,6 +1484,9 @@ def ioc_module_complete(
 
     tier3 = c << tier3_adapter()
     tier3.dmove((500, -180))
+
+    # Weight streaming bus connection label
+    c.add_label("WEIGHTS->PE", position=(620, -130), layer=LAYER_TEXT)
 
     # === MAIN PORTS ===
     # Laser output to ALU
@@ -1306,11 +1587,17 @@ def generate_decoder_only(output_path: Optional[str] = None) -> Component:
 def interactive_ioc_generator():
     """Interactive CLI for generating IOC components."""
     print("\n" + "="*60)
-    print("  IOC MODULE GENERATOR")
+    print("  NRIOC MODULE GENERATOR")
     print("  Input/Output Converter for Ternary Optical Computer")
+    print("  STREAMING WEIGHT ARCHITECTURE")
     print("="*60)
 
-    print("\nAvailable components:")
+    print("\n  ARCHITECTURE NOTE:")
+    print("  Weights stream from RAM tiers to simplified PEs.")
+    print("  PEs are just mixer + routing - no internal storage.")
+    print("")
+
+    print("Available components:")
     print("  1. Complete IOC Module (with laser sources)")
     print("  2. Complete IOC Module (without laser sources)")
     print("  3. Encoder Unit only")
@@ -1318,12 +1605,14 @@ def interactive_ioc_generator():
     print("  5. Timing Sync Unit")
     print("  6. Elastic Buffer")
     print("  7. 81-Trit Shift Register")
-    print("  8. Tier 1 Adapter (Hot Register)")
-    print("  9. Tier 2 Adapter (Working Register)")
-    print(" 10. Tier 3 Adapter (Parking Register)")
-    print(" 11. All RAM Adapters")
+    print("  8. Tier 1 Adapter (Hot Register) - Weight Source")
+    print("  9. Tier 2 Adapter (Working Register) - Weight Source")
+    print(" 10. Tier 3 Adapter (Parking Register) - Weight Source")
+    print(" 11. All RAM Adapters (Weight Streaming)")
+    print(" 12. PE Weight Interface (Simplified PE)")
+    print(" 13. Weight Streaming Bus")
 
-    choice = input("\nSelect component (1-11): ").strip()
+    choice = input("\nSelect component (1-13): ").strip()
 
     import os
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -1370,8 +1659,17 @@ def interactive_ioc_generator():
         t3 = c << tier3_adapter()
         t3.dmove((300, 0))
         c.add_label("ALL RAM TIER ADAPTERS", position=(200, 80), layer=LAYER_TEXT)
+        c.add_label("(WEIGHT STREAMING SOURCE)", position=(200, 60), layer=LAYER_TEXT)
         chip = c
         chip_name = "all_ram_adapters"
+    elif choice == "12":
+        # PE Weight Interface - shows simplified PE architecture
+        chip = pe_weight_interface(pe_id=0)
+        chip_name = "pe_weight_interface"
+    elif choice == "13":
+        # Weight Streaming Bus
+        chip = weight_streaming_bus(n_channels=4)
+        chip_name = "weight_streaming_bus"
     else:
         print("Invalid selection")
         return None

@@ -46,8 +46,8 @@ This document specifies the software driver interface for the Wavelength-Divisio
 │                       N-RADIX OPTICAL CHIP                          │
 │                                                                      │
 │    Systolic array of Processing Elements (PEs)                      │
-│    All PEs do add/subtract on optical signals                       │
-│    Weights stored in bistable Kerr resonators                       │
+│    PEs are simple: SFG mixer + optical routing only                 │
+│    Weights STREAMED from optical RAM (not stored per-PE)            │
 │    Clock: 617 MHz (central Kerr optical clock)                      │
 │                                                                      │
 │    *** DRIVER DOESN'T TOUCH THIS - IT'S ALL PHOTONS ***             │
@@ -62,9 +62,10 @@ This document specifies the software driver interface for the Wavelength-Divisio
 
 1. **Memory Management**
    - Allocate buffers for input matrices (activations)
-   - Allocate buffers for weight matrices
+   - Allocate buffers for weight matrices (streamed to PEs from optical RAM)
    - Allocate buffers for output results
    - Handle DMA transfers to/from NR-IOC
+   - Coordinate with optical RAM (CPU's 3-tier memory serves both CPU and accelerator)
 
 2. **Encoding (Host → NR-IOC)**
    - Convert floating-point matrices to balanced ternary
@@ -77,13 +78,13 @@ This document specifies the software driver interface for the Wavelength-Divisio
    - Convert back to floating-point
 
 4. **Command Interface**
-   - Load weights to PE array
+   - Stream weights to PE array from optical RAM (weights not stored per-PE)
    - Stream activations through array
    - Trigger computation
    - Collect results
 
 5. **Synchronization**
-   - Wait for weight loading complete
+   - Wait for weight streaming complete (weights flow from optical RAM to PEs)
    - Wait for computation complete
    - Handle interrupts from NR-IOC
 
@@ -168,9 +169,65 @@ The NR-IOC applies **3^3 encoding** - each trit represents **trit³** worth of v
 
 ---
 
+## PE Design: Simple Mixer + Routing
+
+**BREAKTHROUGH:** PEs are dramatically simplified - each PE is just a mixer + optical routing.
+
+### What Changed
+
+| Aspect | Old Design | New Design |
+|--------|-----------|------------|
+| **PE complexity** | Mixer + bistable Kerr resonator | Mixer + routing only |
+| **Weight storage** | Per-PE (distributed) | Optical RAM (centralized) |
+| **Fabrication** | Every PE must have working memory | Simple passive optics |
+| **Yield impact** | One bad resonator = bad PE | Higher yield (simpler PEs) |
+
+### Why This Matters
+
+1. **Simpler PEs** - No exotic per-PE storage. Just mix incoming signals and route.
+2. **Higher fabrication yield** - Passive optics are much easier to make reliably.
+3. **Unified memory** - CPU's optical RAM serves both CPU operations AND accelerator weight streaming.
+4. **All-optical path** - Weights flow: optical RAM → waveguides → PEs → computation. No O/E/O conversion.
+
+---
+
+## Memory Hierarchy: Optical RAM Serves Both CPU and Accelerator
+
+The CPU's 3-tier optical RAM system now serves double duty:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    OPTICAL RAM (CPU's 3-TIER SYSTEM)                │
+│                                                                      │
+│   L1: Kerr bistable resonators (fast, small)                        │
+│   L2: Ring resonator arrays (medium)                                │
+│   L3: Waveguide delay lines (large, slower)                         │
+│                                                                      │
+│   ┌─────────────────────────────────────────────────────────────┐   │
+│   │                    DUAL PURPOSE                              │   │
+│   │                                                               │   │
+│   │   CPU Operations          Accelerator Weight Streaming       │   │
+│   │   (data, instructions)    (weights → PEs)                    │   │
+│   │                                                               │   │
+│   └─────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────┘
+                              │
+                              │ Weight streaming
+                              ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    SYSTOLIC PE ARRAY                                 │
+│                                                                      │
+│   PEs are SIMPLE: mixer + routing only                              │
+│   No per-PE weight storage needed                                   │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## PE Types and Interpretation
 
-The chip has two types of Processing Elements:
+The chip has two types of Processing Elements (both simple mixer + routing):
 
 | PE Type | What It Does | NR-IOC Interpretation |
 |---------|--------------|-------------------|
@@ -203,19 +260,21 @@ typedef struct {
 
 | Command | Value | Description |
 |---------|-------|-------------|
-| `NR_LOAD_WEIGHTS` | 0x01 | Load weight matrix to PE array |
+| `NR_STREAM_WEIGHTS` | 0x01 | Stream weight matrix from optical RAM to PEs |
 | `NR_STREAM_INPUT` | 0x02 | Stream activation matrix through array |
 | `NR_COMPUTE` | 0x03 | Trigger computation (weights × inputs) |
 | `NR_READ_OUTPUT` | 0x04 | Read results from output edge |
 | `NR_RESET` | 0x0F | Reset NR-IOC state |
 
+**Note:** Weights are stored in optical RAM (CPU's 3-tier memory system) and STREAMED to PEs. PEs are simple (mixer + routing only) with no per-PE weight storage. This design simplifies fabrication and increases yield.
+
 ### Typical Operation Sequence
 
 ```c
-// 1. Load weights (done once per layer)
+// 1. Stream weights from optical RAM (done once per layer)
 nrioc_command_t cmd = {
-    .command = NR_LOAD_WEIGHTS,
-    .src_addr = weight_buffer,
+    .command = NR_STREAM_WEIGHTS,
+    .src_addr = weight_buffer,  // Points to optical RAM location
     .width = 27,
     .height = 27,
     .pe_type = PE_TYPE_MUL  // Weights are for multiplication
@@ -410,7 +469,7 @@ int ternary_to_float_matrix(void *src, float *dst, int w, int h);
 │  PERFORMANCE:  Matrix multiply: ~1.8× boost                    │
 │                Pure accumulation: 9× boost                      │
 │                                                                 │
-│  COMMANDS:     LOAD_WEIGHTS → STREAM_INPUT → READ_OUTPUT       │
+│  COMMANDS:     STREAM_WEIGHTS → STREAM_INPUT → READ_OUTPUT     │
 │                                                                 │
 │  BUFFERS:      64-byte aligned, 5 trits/byte packing          │
 │                                                                 │
