@@ -42,7 +42,7 @@ This paper extends that theoretical foundation into a complete accelerator archi
 \item \textbf{N-Radix Input/Output Converter (NR-IOC)} specifications for bridging binary electronic systems with optical ternary computation
 \item \textbf{Practical performance analysis} showing realistic throughput gains for matrix multiply workloads
 \item \textbf{FDTD simulation validation} of clock distribution and WDM channel isolation across multiple array sizes
-\item \textbf{Inherent cybersecurity immunity}: Because the geometry is the program, optical accelerators are immune to remote code execution, firmware attacks, and other software-based exploits
+\item \textbf{Architectural security}: The optical compute core has no software attack surface—the geometry is the program. System interfaces still require traditional security
 \end{enumerate}
 
 \section{Wavelength Encoding Review}
@@ -82,7 +82,7 @@ where $C_{\text{switch}}$ is approximately \textbf{constant} regardless of radix
 
 \subsection{Systolic Array Design}
 
-N-Radix employs a systolic array architecture identical in topology to Google's TPU and NVIDIA's tensor cores. Data flows through a 2D grid of Processing Elements (PEs), with each PE performing multiply-accumulate operations as data passes through.
+N-Radix employs a systolic array architecture—a well-established design pattern dating to Kung and Leiserson's foundational work \cite{kung1982}, now widely used in modern AI accelerators \cite{jouppi2017}. Data flows through a 2D grid of Processing Elements (PEs), with each PE performing multiply-accumulate operations as data passes through. The key difference: N-Radix PEs operate on wavelength-encoded ternary values rather than electronic binary.
 
 \begin{figure}[H]
 \centering
@@ -470,27 +470,33 @@ N-Radix offers an unconventional security advantage: \textbf{the geometry is the
 
 Traditional processors execute software—instructions stored in memory, interpreted by logic circuits. This creates an attack surface: buffer overflows, firmware exploits, side-channel attacks, malicious code injection. Every layer of software is a potential vulnerability.
 
-N-Radix has no software. The optical chip is glass and waveguides. Computation is determined by the physical layout—where waveguides meet, how ring resonators are positioned, how light paths intersect. There is no instruction set to exploit, no firmware to corrupt, no memory to overflow.
+The optical compute core has no software. It is glass and waveguides. Computation is determined by the physical layout—where waveguides meet, how ring resonators are positioned, how light paths intersect. There is no instruction set to exploit, no firmware to corrupt, no memory to overflow.
 
-\textbf{To ``hack'' an N-Radix chip, you would need to physically alter the glass.}
+\textbf{To ``hack'' the optical core, you would need to physically alter the glass.}
 
-This makes optical accelerators immune to:
+The optical compute core is immune to:
 \begin{itemize}
-\item \textbf{Remote code execution}: No code to execute
-\item \textbf{Firmware attacks}: No firmware
-\item \textbf{Side-channel exploits}: Photons don't leak electromagnetic signatures like electrons
-\item \textbf{Supply chain tampering}: Physical geometry is verifiable by inspection
+\item \textbf{Remote code execution}: No code to execute in glass
+\item \textbf{Firmware attacks}: No firmware in the optical path
+\item \textbf{Persistent malware}: Cannot install software in waveguides
+\item \textbf{Logic manipulation}: Computation is fixed by geometry
 \end{itemize}
 
-\vspace{0.5em}
-\noindent\fbox{\parbox{0.95\linewidth}{
-\textbf{A Historic First:} For the first time in computing history, a device could be network-connected yet completely immune to remote compromise.
-}}
-\vspace{0.5em}
+\subsection{Important Limitations}
 
-Consider the implications: every connected device ever built—from mainframes to smartphones to IoT sensors—has had some attack surface. Firmware, drivers, protocol stacks, instruction decoders. Somewhere in the stack, there is always software that can be exploited. An optical chip has \emph{none} of that. The geometry \emph{is} the program. To change what it computes, you would have to physically alter the glass—a task requiring physical access and specialized equipment, not a network connection and cleverness.
+We must be clear about what this does \emph{not} protect:
 
-For applications requiring high-assurance computing—defense, critical infrastructure, financial systems—this architectural security is a feature that no amount of software hardening can replicate.
+\begin{itemize}
+\item \textbf{System interfaces}: The NR-IOC, PCIe bus, and host system are electronic and require traditional security practices
+\item \textbf{Input/output manipulation}: An attacker who compromises the host could manipulate data before it reaches the optical core or after it returns
+\item \textbf{Manufacturing trust}: The foundry that fabricates the chip knows the geometry—supply chain security remains a consideration
+\end{itemize}
+
+The security model is analogous to a vault: the optical core (vault) cannot be breached remotely, but the building around it (interfaces, host system) still requires protection. Even if an attacker compromises the electronic interfaces, they cannot alter what the optical core computes—the geometry is physically fixed.
+
+\subsection{The Core Advantage}
+
+For high-assurance applications—cryptographic key storage, secure enclaves, critical infrastructure—the value is clear: \textbf{the compute logic itself has no software attack surface}. Traditional security protects the perimeter; optical geometry protects the core. Defense in depth with a physically immutable foundation.
 
 \section{Conclusion}
 
@@ -503,7 +509,7 @@ We have presented the N-Radix architecture, extending wavelength-division ternar
 \item \textbf{64-bit hardware as the true ceiling}: The optical hardware is unlimited; 64-bit hardware can handle 3\textsuperscript{3} encoding but not higher towers
 \item \textbf{Honest performance claims}: 8 chips match Frontier for matrix multiply; 2 chips match Frontier only for pure ADD workloads
 \item \textbf{FDTD validation}: Clock distribution and WDM isolation validated through electromagnetic simulation up to 27$\times$27 arrays
-\item \textbf{Inherent cybersecurity}: The geometry is the program—no firmware, no software, no remote attack surface
+\item \textbf{Architectural security}: The optical core has no software attack surface; system interfaces require traditional protection
 \end{enumerate}
 
 The architecture offers a path to supercomputer-class performance in dramatically smaller form factors. At 960$\times$960 scale with 3\textsuperscript{3} encoding:
@@ -517,7 +523,7 @@ Even the conservative matrix multiply numbers represent a transformative improve
 
 \section*{Acknowledgment}
 
-Claude (Anthropic) provided assistance by building the tools to test the author's architectural decisions—FDTD simulations, architecture code, and driver implementations. The core innovations—wavelength-division ternary encoding, log-domain tower scaling, N-Radix architecture, and the insight that optical computing provides inherent immunity to cybersecurity attacks—are the work of the author.
+Claude (Anthropic) provided assistance by building the tools to test the author's architectural decisions—FDTD simulations, architecture code, and driver implementations. The core innovations—wavelength-division ternary encoding, log-domain tower scaling, N-Radix architecture, and the insight that optical geometry eliminates software attack surfaces—are the work of the author.
 
 \begin{thebibliography}{10}
 
@@ -544,6 +550,9 @@ D. A. B. Miller, ``Are optical transistors the logical next step?'' \emph{Nature
 
 \bibitem{caulfield2010}
 H. J. Caulfield and S. Dolev, ``Why future supercomputing requires optics,'' \emph{Nature Photonics}, vol. 4, no. 5, pp. 261--263, 2010.
+
+\bibitem{kung1982}
+H. T. Kung and C. E. Leiserson, ``Systolic arrays (for VLSI),'' \emph{Sparse Matrix Proceedings 1978}, SIAM, pp. 256--282, 1979.
 
 \bibitem{oskooi2010meep}
 A. F. Oskooi et al., ``Meep: A flexible free-software package for electromagnetic simulations by the FDTD method,'' \emph{Computer Physics Communications}, vol. 181, no. 3, pp. 687--702, 2010.
