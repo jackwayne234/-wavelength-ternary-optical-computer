@@ -98,7 +98,7 @@ N-Radix uses a **systolic array** design - the same architecture as Google TPUs 
 | 3x3 WDM array | PASSED |
 | 9x9 WDM array | PASSED |
 | 27x27 WDM array (2.4% clock skew) | PASSED |
-| 81x81 WDM array | Queued |
+| 81x81 WDM array (6,561 PEs, all 81 ports) | **PASSED** |
 
 ### Key Documentation
 
