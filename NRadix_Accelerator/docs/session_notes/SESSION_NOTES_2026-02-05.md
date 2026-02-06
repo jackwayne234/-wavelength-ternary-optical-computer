@@ -200,38 +200,9 @@ The interface supports:
 1. Read this file first
 2. The architecture breakthrough is **weights stream from optical RAM, not per-PE storage**
 3. PEs are now simpler: just mixer + routing
-4. **81x81 validation is COMPLETE and PASSED** - README updated with all results
+4. SmallDawg 81x81 may have completed - check results
 5. Paper v2 is in progress for Zenodo
 6. CLAUDE.md has been updated with the architecture notes
-
----
-
-## FUTURE PROJECT: Logarithmic Domain Mathematics
-
-**Status:** Pinned for future deep-dive conversation
-
-### Goal
-Explore how much of mathematics can be reframed into logarithmic domain operations (addition and subtraction only). Not just for the optical computer - as a general mathematical skill and thinking tool.
-
-### Why
-Scaling up logs during the optical computer work was easy and intuitive. The user wants to systematically apply this approach across all areas of math.
-
-### Areas to Cover
-1. **Arithmetic** - multiplication → add logs, division → subtract logs, powers → scale logs
-2. **Algebra** - polynomial evaluation, equation solving in log domain
-3. **Geometry** - areas, volumes, scaling laws (naturally logarithmic)
-4. **Trigonometry** - log-trig identities, how trig functions behave in log space
-5. **Precalculus** - exponential/logarithmic functions (natural fit), sequences and series
-6. **Calculus** - logarithmic differentiation, integration techniques, log transforms
-
-### Key Challenge
-Addition and subtraction in log domain require the Gaussian logarithm: `log(a + b) = log(a) + log(1 + 2^(log(b) - log(a)))`. Finding efficient ways to handle this across all math areas is the central problem.
-
-### Connection to Optical Computer
-SFG mixers already do frequency addition optically. If signals are encoded as frequencies proportional to log-values, the existing hardware is already doing multiplication natively. This could inform future accelerator designs.
-
-### When Ready
-User will revisit this topic in a future session. Start by picking a math area and working through concrete examples of converting standard operations to log-domain equivalents.
 
 ---
 
