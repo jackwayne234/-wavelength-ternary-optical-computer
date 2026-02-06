@@ -31,36 +31,47 @@ An optical AI accelerator achieving ~59× the performance of NVIDIA's B200 for m
 
 This architectural simplification makes the design significantly more practical to manufacture while maintaining the performance advantages of optical compute.
 
-## Cybersecurity Advantages
+## Cybersecurity Considerations
 
-**The geometry is the program.** There is no software to exploit.
+**The geometry is the program.** The optical compute core has no software to exploit.
 
-Unlike conventional processors that execute instructions from memory, the N-Radix accelerator's computation is defined entirely by its physical structure - waveguide routing, mixer placement, and optical paths etched into glass. This creates a fundamentally different security model:
+Unlike conventional processors that execute instructions from memory, the N-Radix accelerator's computation is defined entirely by its physical structure - waveguide routing, mixer placement, and optical paths etched into glass. This creates a fundamentally different security model for the compute core itself.
 
-### What Does Not Exist
+### What the Optical Compute Core Lacks
 
 - **No firmware** - Nothing to flash, nothing to corrupt
 - **No instruction set** - No opcodes to hijack or malicious payloads to inject
-- **No software stack** - No kernel, no drivers, no attack surface
 - **No writable state** - The "program" is lithographically fixed at fabrication
 
-### Immunity Profile
+### Security Comparison (Compute Core Only)
 
-| Attack Vector | Traditional Chips | N-Radix Optical |
-|---------------|-------------------|-----------------|
-| Remote code execution | Vulnerable | **Impossible** - no code to execute |
-| Firmware attacks | Vulnerable | **Impossible** - no firmware exists |
-| Side-channel exploits | Vulnerable | **Immune** - photons don't leak like electrons |
-| Supply chain tampering | Software-level risk | **Physical-only** - requires altering the glass |
+| Attack Vector | Traditional Chips | N-Radix Optical Core |
+|---------------|-------------------|----------------------|
+| Remote code execution | Vulnerable | **No attack surface** - no code exists |
+| Firmware attacks | Vulnerable | **No attack surface** - no firmware exists |
+| Side-channel (power analysis) | Vulnerable | **Reduced risk** - photons behave differently than electrons |
 | Buffer overflows | Common vulnerability | **N/A** - no buffers, no memory addressing |
 
-### Historic Implication
+### What Still Requires Traditional Security
 
-**For the first time in computing history, a device could be network-connected yet completely immune to remote compromise.**
+The optical compute core is only part of a complete system. These components still need conventional security practices:
 
-To attack this chip, you cannot send packets. You cannot craft exploits. You cannot find zero-days. The only attack vector is physical access to alter the optical pathways themselves - and even then, you would need to re-fabricate portions of the chip.
+- **NR-IOC (I/O Controller)** - The interface chip that bridges the optical accelerator to the host system. This has firmware and software.
+- **PCIe Interface** - Standard attack surface for any accelerator card
+- **Host System** - The CPU, OS, and drivers that control the accelerator
+- **Manufacturing Trust** - Like any chip, you must trust the foundry. Malicious modifications at fabrication time are a consideration.
 
-This is not security through obscurity. This is security through architecture - the absence of programmability eliminates the entire class of software-based attacks.
+### The Value Proposition
+
+**Defense in depth with a physically immutable foundation.**
+
+While you cannot build a "completely secure" system, you can eliminate entire categories of attack. The optical compute core provides:
+
+1. **A hardened foundation** - The math happens in glass. No amount of clever packets can change waveguide geometry.
+2. **Reduced attack surface** - Fewer components with software means fewer things to exploit.
+3. **Audit simplicity** - The compute core does exactly what its physical structure dictates. What you see (in the GDS layout) is what you get.
+
+This is not security through obscurity - it's security through architecture. The compute core's lack of programmability eliminates software-based attacks *on that component*. The rest of the system still requires careful engineering.
 
 ## Directory Structure
 

@@ -10,6 +10,13 @@ Reviewing the N-Radix paper for Zenodo publication. Reading through together, ma
 
 All sections reviewed and validated. Paper is ready for publication.
 
+### Final Changes (Feb 5, 2026)
+- **Softened cybersecurity claims** - Optical core is inherently secure, but interfaces need traditional security measures
+- **Added "Important Limitations" subsection** - Honest about what this architecture can and cannot do
+- **Removed Google/NVIDIA references** from systolic array section - more neutral framing
+- **Added Kung & Leiserson (1979) citation** for systolic arrays - proper academic attribution
+- **Overall:** More honest and academically proper. Claims are now well-supported and appropriately hedged.
+
 ---
 
 ## Completed Changes

@@ -277,3 +277,70 @@ The original per-PE bistable storage approach was overengineering. We were tryin
 - **Leverages** existing CPU infrastructure (dual-purpose RAM)
 
 Sometimes the breakthrough isn't adding complexity - it's recognizing you already had the solution and were duplicating it unnecessarily.
+
+---
+
+## Cybersecurity Claims: Softened for Credibility
+
+### The Change
+
+Moved from "immune to attack" language to "architectural security" framing. More honest, more credible.
+
+### What's True
+
+The **optical core itself** has no software attack surface:
+- No instruction set to exploit
+- No firmware to corrupt
+- No code execution - computation is physical geometry
+- You'd need to physically reshape the waveguides to change behavior
+
+### What Still Needs Consideration
+
+Even though the optical core is inherently secure, the complete system still has attack surfaces:
+
+| Component | Attack Surface? | Notes |
+|-----------|----------------|-------|
+| Optical core | **None** | Geometry IS the program |
+| Host interface | Yes | Driver, PCIe, control plane |
+| Host system | Yes | OS, network stack, applications |
+| Manufacturing | Yes | Foundry trust, supply chain |
+| Side channels | Maybe | Timing via interfaces, not core |
+
+### Paper Updates
+
+Added **"Important Limitations"** subsection to the cybersecurity section:
+- Optical core security doesn't extend to interfaces
+- Host system is still vulnerable to traditional attacks
+- Manufacturing trust matters (but tampering breaks function detectably)
+- Defense-in-depth still needed for complete system
+
+### Why This Matters
+
+The original "immune" language was technically defensible for the optical core, but could be read as claiming the whole system was unhackable. That's not true and would hurt credibility. The new framing:
+- Preserves the genuine insight (optical core has no software attack surface)
+- Acknowledges real-world limitations
+- More likely to be taken seriously by security experts
+
+**Better to undersell and overdeliver than overpromise.**
+
+---
+
+## Systolic Array Citation Update
+
+### The Change
+
+Removed Google and NVIDIA names from systolic array section. Added proper academic citation.
+
+### Why
+
+Google's TPU and NVIDIA's Tensor Cores popularized systolic arrays in AI, but they didn't invent them. The original work deserves credit.
+
+### Added Citation
+
+**H.T. Kung and Charles E. Leiserson**, "Systolic Arrays (for VLSI)" - the foundational 1979 paper that introduced systolic array architecture.
+
+### Context
+
+Kung & Leiserson's work showed how data can flow rhythmically through a mesh of simple processing elements, like blood through a circulatory system (hence "systolic"). This is exactly what we're doing optically - their architecture, our medium.
+
+Giving proper attribution strengthens the paper. Shows we know the history, not just the current hype.
