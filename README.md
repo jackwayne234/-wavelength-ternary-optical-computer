@@ -49,7 +49,7 @@ The glass never changes. Only the encoding does.
 
 *N-Radix operations are single-trit balanced ternary, not FP16. Direct FLOPS comparison is apples-to-oranges — the advantage is power efficiency and architectural simplicity, not raw throughput vs mature GPUs.*
 
-With 6-triplet WDM (Phase 2): ~438 TFLOPS at the same power — **~22 TFLOPS/W**.
+With 6-triplet WDM (Phase 2): ~438 TFLOPS at the same power — **~22 TFLOPS/W** (~16x H100, ~10x B200 power efficiency).
 
 ---
 
