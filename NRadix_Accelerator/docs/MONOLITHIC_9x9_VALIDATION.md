@@ -7,8 +7,8 @@
 
 ## Chip Dimensions
 
-- Width: 1095 μm
-- Height: 695 μm
+- Width: 1115 μm
+- Height: 735 μm
 - Material: X-cut LiNbO3 (TFLN), n = 2.2
 
 ## Validation Results

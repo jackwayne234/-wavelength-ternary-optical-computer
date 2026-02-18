@@ -61,12 +61,14 @@ gf.gpdk.PDK.activate()
 
 LAYER_WAVEGUIDE: LayerSpec = (1, 0)      # LiNbO3 waveguides
 LAYER_CHI2_SFG: LayerSpec = (2, 0)       # SFG mixer regions (PPLN)
+LAYER_PPLN_STRIPES: LayerSpec = (2, 1)   # PPLN poling electrode stripes (within mixer)
 LAYER_PHOTODET: LayerSpec = (3, 0)       # Photodetector regions
 LAYER_CHI2_DFG: LayerSpec = (4, 0)       # DFG mixer regions
 LAYER_KERR_CLK: LayerSpec = (5, 0)       # Kerr clock resonator
 LAYER_HEATER: LayerSpec = (10, 0)        # TiN heaters / RF electrodes
 LAYER_CARRY: LayerSpec = (11, 0)         # Vertical data flow
-LAYER_METAL_PAD: LayerSpec = (12, 0)     # Bond pads (Ti/Au)
+LAYER_METAL_PAD: LayerSpec = (12, 0)     # Bond pads (Ti/Au) — wire-bond only
+LAYER_METAL_INT: LayerSpec = (12, 1)     # Internal metal (control pads, RF electrodes)
 LAYER_LOG: LayerSpec = (13, 0)           # Saturable absorber (Er/Yb)
 LAYER_GAIN: LayerSpec = (14, 0)          # Gain medium (Er/Yb)
 LAYER_AWG: LayerSpec = (15, 0)           # AWG demux regions
@@ -105,9 +107,10 @@ ARRAY_HEIGHT = N_ROWS * PE_PITCH  # 495 μm
 IOC_INPUT_WIDTH = 180.0       # μm — left edge (encoders)
 IOC_OUTPUT_WIDTH = 200.0      # μm — right edge (decoders)
 
-# Chip margins
-MARGIN_X = 50.0               # μm from region to chip edge
-MARGIN_Y = 80.0               # μm top/bottom margins
+# Chip margins (must satisfy EDGE.1: features >= 50 um from die edge)
+MARGIN_X = 60.0               # μm from region to chip edge
+MARGIN_Y = 120.0              # μm bottom margin (room for Kerr clock + routing)
+MARGIN_Y_TOP = 80.0           # μm top margin (above weight bus)
 WEIGHT_BUS_HEIGHT = 40.0      # μm — weight streaming bus
 
 # Routing gaps between regions
@@ -122,7 +125,7 @@ CLOCK_FREQ_MHZ = 617
 
 CHIP_WIDTH = (MARGIN_X + IOC_INPUT_WIDTH + ROUTING_GAP +
               ARRAY_WIDTH + ROUTING_GAP + IOC_OUTPUT_WIDTH + MARGIN_X)
-CHIP_HEIGHT = (MARGIN_Y + WEIGHT_BUS_HEIGHT + ARRAY_HEIGHT + MARGIN_Y)
+CHIP_HEIGHT = (MARGIN_Y + ARRAY_HEIGHT + WEIGHT_BUS_HEIGHT + MARGIN_Y_TOP)
 
 # Region positions (X origins)
 IOC_INPUT_X = MARGIN_X
@@ -174,13 +177,14 @@ def monolithic_pe(row: int = 0, col: int = 0) -> Component:
         (mixer_x, mixer_y + mixer_h)
     ], layer=LAYER_CHI2_SFG)
 
-    # PPLN poling stripes
+    # PPLN poling stripes (periodic domain inversion electrodes)
+    # Separate datatype (2,1) from mixer region (2,0) for DRC clarity
     for i in range(int(mixer_w / 3)):
         x = mixer_x + i * 3 + 0.5
         c.add_polygon([
             (x, mixer_y + 2), (x + 1.5, mixer_y + 2),
             (x + 1.5, mixer_y + mixer_h - 2), (x, mixer_y + mixer_h - 2)
-        ], layer=LAYER_HEATER)
+        ], layer=LAYER_PPLN_STRIPES)
 
     # Accumulator loop (recirculating delay)
     acc_x = 40
@@ -287,11 +291,17 @@ def ioc_input_encoder(row_id: int = 0) -> Component:
             (10 + mzi_width, y_off + mzi_height), (10, y_off + mzi_height)
         ], layer=LAYER_WAVEGUIDE)
 
-        # RF electrode
+        # RF electrode (MZI phase control)
         c.add_polygon([
             (15, y_off + mzi_height + 1), (45, y_off + mzi_height + 1),
             (45, y_off + mzi_height + 3), (15, y_off + mzi_height + 3)
         ], layer=LAYER_HEATER)
+
+        # RF electrode contact pad (internal, not wire-bond)
+        c.add_polygon([
+            (47, y_off + mzi_height - 1), (57, y_off + mzi_height - 1),
+            (57, y_off + mzi_height + 5), (47, y_off + mzi_height + 5)
+        ], layer=LAYER_METAL_INT)
 
         c.add_label(label, position=(30, y_off + mzi_height/2), layer=LAYER_TEXT)
 
@@ -320,10 +330,10 @@ def ioc_input_encoder(row_id: int = 0) -> Component:
     c.add_port("encoded_out", center=(width, height/2), width=WAVEGUIDE_WIDTH,
                orientation=0, layer=LAYER_WAVEGUIDE)
 
-    # Control pads
+    # Control pads (internal — not wire-bond)
     c.add_polygon([
         (5, height - 8), (25, height - 8), (25, height - 2), (5, height - 2)
-    ], layer=LAYER_METAL_PAD)
+    ], layer=LAYER_METAL_INT)
     c.add_label(f"ENC_{row_id}", position=(15, height + 2), layer=LAYER_TEXT)
 
     return c
@@ -378,12 +388,12 @@ def ioc_output_decoder(col_id: int = 0) -> Component:
             (pd_x + 20, pd_y + 6), (pd_x, pd_y + 6)
         ], layer=LAYER_DETECTOR)
 
-    # Result encoder block
+    # Result encoder block (internal electronics — not wire-bond)
     enc_x = pd_x + 30
     c.add_polygon([
         (enc_x, 10), (enc_x + 30, 10),
         (enc_x + 30, height - 10), (enc_x, height - 10)
-    ], layer=LAYER_METAL_PAD)
+    ], layer=LAYER_METAL_INT)
     c.add_label("5->3", position=(enc_x + 15, height/2), layer=LAYER_TEXT)
 
     # Input port (from array)
@@ -596,11 +606,11 @@ def kerr_clock_unit() -> Component:
         (-ring_radius - 5, -ring_radius - 3 + WAVEGUIDE_WIDTH/2)
     ], layer=LAYER_WAVEGUIDE)
 
-    # Pump input pad
+    # Pump input pad (internal — not wire-bond)
     c.add_polygon([
         (-8, ring_radius + 2), (8, ring_radius + 2),
         (8, ring_radius + 10), (-8, ring_radius + 10)
-    ], layer=LAYER_METAL_PAD)
+    ], layer=LAYER_METAL_INT)
 
     # Labels
     c.add_label("617 MHz", position=(0, 0), layer=LAYER_TEXT)
@@ -739,10 +749,11 @@ def monolithic_chip_9x9(
                 ], layer=LAYER_WAVEGUIDE)
 
             # Vertical waveguide between PEs in same column
+            # Only fill the gap between PEs (PE internal carries handle the rest)
             if row > 0:
                 x = pe_x + PE_WIDTH / 2
-                y_start = ARRAY_Y + (row - 1) * PE_PITCH
-                y_end = ARRAY_Y + row * PE_PITCH + PE_HEIGHT
+                y_start = ARRAY_Y + (row - 1) * PE_PITCH + PE_HEIGHT  # Top of previous PE
+                y_end = ARRAY_Y + row * PE_PITCH                       # Bottom of current PE
                 c.add_polygon([
                     (x - WAVEGUIDE_WIDTH/2, y_start),
                     (x + WAVEGUIDE_WIDTH/2, y_start),
@@ -801,30 +812,32 @@ def monolithic_chip_9x9(
 
         # Route down, then right to decoder
         # Vertical segment down to routing channel
-        route_y = ARRAY_Y - 5 - col * 3  # Stagger to avoid crossing
+        route_y = ARRAY_Y - 5 - col * 3  # Stagger Y to avoid crossing
         c.add_polygon([
-            (col_x - WAVEGUIDE_WIDTH/2, col_bottom_y),
-            (col_x + WAVEGUIDE_WIDTH/2, col_bottom_y),
+            (col_x - WAVEGUIDE_WIDTH/2, route_y),
             (col_x + WAVEGUIDE_WIDTH/2, route_y),
-            (col_x - WAVEGUIDE_WIDTH/2, route_y)
+            (col_x + WAVEGUIDE_WIDTH/2, col_bottom_y),
+            (col_x - WAVEGUIDE_WIDTH/2, col_bottom_y)
         ], layer=LAYER_CARRY)
 
-        # Horizontal segment to right edge
-        dec_x = IOC_OUTPUT_X
+        # Stagger X for vertical rise to decoder (3 um apart per column)
+        rise_x = IOC_OUTPUT_X + 5 + col * 3  # Each column at different X
         dec_y = ARRAY_Y + col * PE_PITCH + PE_HEIGHT / 2
+
+        # Horizontal segment to rise point
         c.add_polygon([
             (col_x, route_y - WAVEGUIDE_WIDTH/2),
-            (dec_x + 5, route_y - WAVEGUIDE_WIDTH/2),
-            (dec_x + 5, route_y + WAVEGUIDE_WIDTH/2),
+            (rise_x, route_y - WAVEGUIDE_WIDTH/2),
+            (rise_x, route_y + WAVEGUIDE_WIDTH/2),
             (col_x, route_y + WAVEGUIDE_WIDTH/2)
         ], layer=LAYER_CARRY)
 
         # Vertical segment up to decoder input
         c.add_polygon([
-            (dec_x + 5 - WAVEGUIDE_WIDTH/2, route_y),
-            (dec_x + 5 + WAVEGUIDE_WIDTH/2, route_y),
-            (dec_x + 5 + WAVEGUIDE_WIDTH/2, dec_y),
-            (dec_x + 5 - WAVEGUIDE_WIDTH/2, dec_y)
+            (rise_x - WAVEGUIDE_WIDTH/2, route_y),
+            (rise_x + WAVEGUIDE_WIDTH/2, route_y),
+            (rise_x + WAVEGUIDE_WIDTH/2, dec_y),
+            (rise_x - WAVEGUIDE_WIDTH/2, dec_y)
         ], layer=LAYER_CARRY)
 
     # =========================================================================
@@ -931,6 +944,67 @@ def monolithic_chip_9x9(
         c.add_label("(not distributed to PEs)",
                      position=(clock_x, clock_y - 35),
                      layer=LAYER_TEXT)
+
+    # =========================================================================
+    # Wire-Bond Pad Ring (proper 100x100 um pads at chip periphery)
+    # =========================================================================
+
+    print("  Adding wire-bond pad ring...")
+
+    PAD_SIZE = 100.0       # um — wire-bond minimum
+    PAD_MARGIN = 55.0      # um from chip edge to pad edge (satisfies EDGE.1 50 um)
+    PAD_PITCH = 150.0      # um center-to-center (satisfies MTL2.S.1 50 um)
+
+    pad_count = 0
+
+    # Left edge pads (9 laser inputs + 1 pump)
+    for i in range(10):
+        pad_y = MARGIN_Y + i * PAD_PITCH
+        if pad_y + PAD_SIZE > CHIP_HEIGHT - PAD_MARGIN:
+            break
+        c.add_polygon([
+            (PAD_MARGIN, pad_y),
+            (PAD_MARGIN + PAD_SIZE, pad_y),
+            (PAD_MARGIN + PAD_SIZE, pad_y + PAD_SIZE),
+            (PAD_MARGIN, pad_y + PAD_SIZE)
+        ], layer=LAYER_METAL_PAD)
+        c.add_label(f"L{i}", position=(PAD_MARGIN + PAD_SIZE/2, pad_y + PAD_SIZE/2),
+                    layer=LAYER_TEXT)
+        pad_count += 1
+
+    # Right edge pads (9 data outputs + 1 ground)
+    for i in range(10):
+        pad_y = MARGIN_Y + i * PAD_PITCH
+        if pad_y + PAD_SIZE > CHIP_HEIGHT - PAD_MARGIN:
+            break
+        pad_x = CHIP_WIDTH - PAD_MARGIN - PAD_SIZE
+        c.add_polygon([
+            (pad_x, pad_y),
+            (pad_x + PAD_SIZE, pad_y),
+            (pad_x + PAD_SIZE, pad_y + PAD_SIZE),
+            (pad_x, pad_y + PAD_SIZE)
+        ], layer=LAYER_METAL_PAD)
+        c.add_label(f"R{i}", position=(pad_x + PAD_SIZE/2, pad_y + PAD_SIZE/2),
+                    layer=LAYER_TEXT)
+        pad_count += 1
+
+    # Bottom edge pads (power, ground, test)
+    for i in range(4):
+        pad_x = MARGIN_X + IOC_INPUT_WIDTH + ROUTING_GAP + i * PAD_PITCH
+        if pad_x + PAD_SIZE > CHIP_WIDTH - MARGIN_X:
+            break
+        c.add_polygon([
+            (pad_x, PAD_MARGIN),
+            (pad_x + PAD_SIZE, PAD_MARGIN),
+            (pad_x + PAD_SIZE, PAD_MARGIN + PAD_SIZE),
+            (pad_x, PAD_MARGIN + PAD_SIZE)
+        ], layer=LAYER_METAL_PAD)
+        c.add_label(f"B{i}", position=(pad_x + PAD_SIZE/2, PAD_MARGIN + PAD_SIZE/2),
+                    layer=LAYER_TEXT)
+        pad_count += 1
+
+    print(f"    Placed {pad_count} wire-bond pads ({PAD_SIZE:.0f}x{PAD_SIZE:.0f} um, "
+          f"{PAD_PITCH:.0f} um pitch)")
 
     # =========================================================================
     # Title Block & Specifications
