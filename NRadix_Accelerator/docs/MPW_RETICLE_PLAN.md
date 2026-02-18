@@ -1,7 +1,7 @@
 # Multi-Project Wafer (MPW) Reticle Integration Plan
 
-**Document Version:** 1.0
-**Date:** February 5, 2026
+**Document Version:** 2.0
+**Date:** February 18, 2026 (updated from v1.0, Feb 5)
 **Project:** Wavelength-Division Ternary Optical Computer
 **Author:** Christopher Riner
 
@@ -46,8 +46,8 @@ Components:
 - 2x Wavelength combiners
 - 1x MMI 2x2 coupler
 - 1x SFG mixer (chi-2)
-- 1x AWG demux (5-channel output)
-- 5x Photodetectors
+- 1x AWG demux (6-channel output)
+- 6x Photodetectors (one per SFG output wavelength)
 
 Purpose: Verify fundamental ternary arithmetic, SFG mixing, wavelength encoding
 ```
@@ -60,9 +60,9 @@ Area: 0.72 mm^2
 Components:
 - 9x Single ALU units
 - Carry chain interconnects
-- Shared clock distribution
+- Path-length-matched waveguide routing (passive — no clock to PEs)
 
-Purpose: Validate multi-trit carry propagation, timing
+Purpose: Validate multi-trit carry propagation, path-length synchronization
 ```
 
 #### 2.3 27x27 Systolic Array
@@ -81,7 +81,7 @@ Components:
 - 729 Processing Elements (mixer + routing, NO per-PE weight storage)
 - Weight streaming bus (weights from optical RAM)
 - Activation I/O buffers
-- Clock distribution (center-out radial)
+- Passive array (no clock distribution — photon arrival synchronized via matched waveguide path lengths)
 
 Note: Weights stored in optical RAM (CPU's 3-tier memory) and STREAMED to PEs.
 This simplifies PE design dramatically - higher yield, easier fabrication.
@@ -119,9 +119,9 @@ Based on:
 
 Components:
 - 6,561 Processing Elements (mixer + routing, NO per-PE weight storage)
-- LINEAR/LOG/LOG-LOG mode support
+- LINEAR/LOG/LOG-LOG mode support (IOC determines domain; PEs physically identical)
 - Weight STREAMING architecture (weights from optical RAM, not per-PE)
-- 617 MHz clock distribution
+- IOC-internal Kerr clock (accelerator PEs are passive — no clock distribution needed)
 
 Fabrication advantage: Simple PEs = higher yield. Complex memory is
 centralized in optical RAM, not distributed across 6,561 PEs.
@@ -240,12 +240,11 @@ Structure Type: Cutback Method
 Dimensions per structure: 6000 x 100 um (serpentine for longer paths)
 Total PCM area: 6000 x 500 um = 3 mm^2
 
-Test wavelengths:
-- 1.550 um (C-band, "Red" input)
-- 1.310 um (O-band)
-- 1.216 um ("Green" input)
-- 1.064 um (near-IR)
-- 1.000 um ("Blue" input)
+Test wavelengths (single triplet: 1550/1310/1064 nm):
+- 1.550 um (C-band, "Red" = trit -1)
+- 1.310 um (O-band, "Green" = trit 0)
+- 1.064 um (near-IR, "Blue" = trit +1)
+- SFG outputs: 0.532, 0.587, 0.631, 0.655, 0.710, 0.775 um
 
 Pass criteria: Loss < 3 dB/cm at all wavelengths
 ```
@@ -294,23 +293,25 @@ Structure:
   ┌────────────────────────────────────────────────────────┐
   │                                                        │
   │  [1550nm]━┓                                           │
-  │           ┣━━[SFG MIXER 20um]━━━[5ch AWG]━┳━[DET -2] │
-  │  [1000nm]━┛        │                      ┣━[DET -1] │
-  │                    │                      ┣━[DET  0] │
-  │                  PPLN                     ┣━[DET +1] │
-  │              (chi-2 region)               ┗━[DET +2] │
+  │           ┣━━[SFG MIXER 20um]━━━[6ch AWG]━┳━[DET +1] │  532nm
+  │  [1064nm]━┛        │                      ┣━[DET  0] │  587nm
+  │                    │                      ┣━[DET -1] │  631nm
+  │                  PPLN                     ┣━[DET  0] │  655nm
+  │              (chi-2 region)               ┣━[DET  0] │  710nm
+  │                                           ┗━[DET +1] │  775nm
   │                                                        │
   │  Mixer lengths: 10, 15, 20, 25, 30 um                 │
   │                                                        │
   └────────────────────────────────────────────────────────┘
 
-Test combinations:
-- R+R (1.550+1.550) -> 0.775 um (DET_-2)
-- R+G (1.550+1.216) -> 0.681 um (DET_-1)
-- R+B (1.550+1.000) -> 0.608 um (DET_0)
-- G+G (1.216+1.216) -> 0.608 um (DET_0)  ** CRITICAL: must match R+B **
-- G+B (1.216+1.000) -> 0.549 um (DET_+1)
-- B+B (1.000+1.000) -> 0.500 um (DET_+2)
+Test combinations (1550/1310/1064 nm triplet):
+- B+B (1.064+1.064) -> 0.532 um (DET +1)
+- G+B (1.310+1.064) -> 0.587 um (DET  0)
+- R+B (1.550+1.064) -> 0.631 um (DET -1)
+- G+G (1.310+1.310) -> 0.655 um (DET  0)
+- R+G (1.550+1.310) -> 0.710 um (DET  0)
+- R+R (1.550+1.550) -> 0.775 um (DET +1)
+Min SFG output spacing: 24.1 nm (collision-free, validated)
 
 Array configuration:
 - 5 mixer lengths x 6 input combinations = 30 test structures
@@ -318,8 +319,8 @@ Array configuration:
 - Total: 30 x 0.12 mm^2 = 3.6 mm^2
 
 Pass criteria:
-- Detectable SFG signal at all combinations
-- R+B and G+G outputs within +/- 1 nm (confirms harmonic mean design)
+- Detectable SFG signal at all 6 combinations
+- All 6 SFG outputs at distinct wavelengths (min 24.1 nm spacing)
 - Conversion efficiency measurable (target: -20 dB or better)
 ```
 
@@ -327,8 +328,8 @@ Pass criteria:
 
 ```
 AWG Characterization:
-- 3-channel input demux (for ternary inputs)
-- 5-channel output demux (for SFG results)
+- 3-channel input demux (for ternary inputs: 1550/1310/1064 nm)
+- 6-channel output demux (for SFG results: 532/587/631/655/710/775 nm)
 - Center wavelength accuracy: +/- 1 nm
 - Channel isolation: > 20 dB
 - Area: 1.5 mm^2
@@ -574,18 +575,20 @@ Dicing cuts: Horizontal at 2, 4, 6, 8 mm
 
 ### Recommended Strategy
 
-**Phase 1: Initial Characterization (5 x 5 mm slot)**
-- Focus on PCMs and single ALU verification
-- 6-8 single ALUs with variations
-- Full waveguide loss, ring, and SFG test suite
-- Estimated cost: $3,000-8,000
+**Phase 1: Single-Triplet MVP — FAB READY (5 x 5 mm or 10 x 10 mm slot)**
+- Circuit simulation: 8/8 tests PASS (single triplet, 1064/1310/1550 nm)
+- Monte Carlo: 10,000 trials, 99.82% yield
+- Thermal: 30 deg C passive window (15-45 deg C), no TEC required
+- Focus on PCMs + single ALU + 9-trit nonad + 9x9 systolic array
+- Single-triplet encoding validated end-to-end
+- Estimated cost: $8,000-25,000
 
-**Phase 2: Array Validation (10 x 10 mm slot)**
-- 27x27 systolic array
-- Multiple 9-trit nonads
-- Additional single ALUs for redundancy
-- Expanded PCM coverage
-- Estimated cost: $8,000-20,000
+**Phase 2: Multi-Triplet WDM (10 x 10 mm slot)**
+- Extend to 6-triplet WDM for higher throughput
+- Cross-triplet PPLN coupling found at 60 nm spacing — requires per-triplet PPLN sections, separate waveguide lanes, or wider spacing
+- 27x27 systolic array with multi-wavelength channels
+- Expanded PCM coverage for WDM isolation characterization
+- Estimated cost: $15,000-30,000
 
 **Phase 3: Full System (dedicated run or large MPW)**
 - 81-trit full processor
@@ -607,6 +610,9 @@ Dicing cuts: Horizontal at 2, 4, 6, 8 mm
 - [ ] Scribe lanes properly sized
 - [ ] Text labels on correct layer (toggle-able)
 - [ ] Dicing plan documented
+- [x] Circuit-level simulation PASS (8/8 tests, single triplet)
+- [x] Monte Carlo process variation analysis (99.82% yield, 10k trials)
+- [x] Thermal sensitivity analysis (15-45 deg C passive window)
 
 ### Files to Submit
 
@@ -620,12 +626,17 @@ Dicing cuts: Horizontal at 2, 4, 6, 8 mm
 
 ## 10. References
 
-1. Design Summary: `/home/jackwayne/Desktop/Optical_computing/Phase3_Chip_Simulation/DESIGN_SUMMARY.md`
-2. GDS Files: `/home/jackwayne/Desktop/Optical_computing/Research/data/gds/`
-3. Foundry Inquiry: `/home/jackwayne/Desktop/Optical_computing/Phase3_Chip_Simulation/foundry_inquiry_email.txt`
-4. Systolic Array Generator: `/home/jackwayne/Desktop/Optical_computing/Research/programs/nradix_architecture/optical_systolic_array.py`
+1. Monolithic 9x9 Architecture: `/home/jackwayne/Desktop/Projects/Optical_computing/NRadix_Accelerator/architecture/monolithic_chip_9x9.py`
+2. Circuit Simulation (8/8 PASS): `/home/jackwayne/Desktop/Projects/Optical_computing/NRadix_Accelerator/circuit_sim/simulate_9x9.py`
+3. Circuit Simulation Plan: `/home/jackwayne/Desktop/NRadix_Chip_Package/CIRCUIT_SIMULATION_PLAN.md`
+4. Foundry Submission Package: `/home/jackwayne/Desktop/NRadix_Chip_Package/FOUNDRY_SUBMISSION_PACKAGE.md`
+5. Tape-Out Readiness: `/home/jackwayne/Desktop/NRadix_Chip_Package/TAPEOUT_READINESS.md`
+6. Paper v1 (Theory): https://zenodo.org/records/18437600
+7. Paper v2 (Architecture): https://zenodo.org/records/18501296
 
 ---
 
 *Document prepared for Multi-Project Wafer submission planning.*
 *Wavelength-Division Ternary Optical Computer Project*
+*Single-triplet MVP: fab-ready. Multi-triplet WDM: Phase 2.*
+*Circuit sim 8/8 PASS | Monte Carlo 99.82% yield | Thermal 15-45 deg C passive*

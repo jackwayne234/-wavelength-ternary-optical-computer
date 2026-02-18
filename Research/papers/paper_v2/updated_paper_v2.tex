@@ -1,6 +1,7 @@
 \documentclass[journal]{IEEEtran}
 
 % Packages
+\usepackage[utf8]{inputenc}
 \usepackage{graphicx}
 \usepackage{amsmath}
 \usepackage{cite}
@@ -15,7 +16,7 @@
 
 \begin{document}
 
-\title{Wavelength-Division Ternary Computing II:\\N-Radix Optical AI Accelerator vs. B200 and Frontier}
+\title{Wavelength-Division Ternary Computing II:\\The N-Radix Optical AI Accelerator}
 
 \author{Christopher Riner%
 \thanks{Independent Researcher: Chesapeake, VA, US. Email: chrisriner45@gmail.com}}
@@ -88,20 +89,20 @@ N-Radix employs a systolic array architecture—a well-established design patter
 \centering
 \begin{verbatim}
     Weight inputs (stationary in PEs)
-                ↓
-    ┌─────────────────────────────────┐
-    │   PE─PE─PE─PE─PE─PE─PE─PE─PE   │
-A → │   PE─PE─PE─PE─PE─PE─PE─PE─PE → C
-c   │   PE─PE─PE─PE─PE─PE─PE─PE─PE   │
-t   │   PE─PE─PE─PE─PE─PE─PE─PE─PE   │
-i   │   PE─PE─PE─PE─PE─PE─PE─PE─PE   │
-v   │   PE─PE─PE─PE─PE─PE─PE─PE─PE   │
-a   │   PE─PE─PE─PE─PE─PE─PE─PE─PE   │
-t   │   PE─PE─PE─PE─PE─PE─PE─PE─PE   │
-i   │   PE─PE─PE─PE─PE─PE─PE─PE─PE   │
-o   │             ↓                   │
-n   │      Accumulated outputs        │
-s   └─────────────────────────────────┘
+                |
+    +---------------------------------+
+    |   PE-PE-PE-PE-PE-PE-PE-PE-PE    |
+A ->|   PE-PE-PE-PE-PE-PE-PE-PE-PE -> C
+c   |   PE-PE-PE-PE-PE-PE-PE-PE-PE    |
+t   |   PE-PE-PE-PE-PE-PE-PE-PE-PE    |
+i   |   PE-PE-PE-PE-PE-PE-PE-PE-PE    |
+v   |   PE-PE-PE-PE-PE-PE-PE-PE-PE    |
+a   |   PE-PE-PE-PE-PE-PE-PE-PE-PE    |
+t   |   PE-PE-PE-PE-PE-PE-PE-PE-PE    |
+i   |   PE-PE-PE-PE-PE-PE-PE-PE-PE    |
+o   |             |                   |
+n   |      Accumulated outputs        |
+s   +---------------------------------+
 \end{verbatim}
 \caption{Systolic array topology. Activations stream from left, weights are stationary in PEs, accumulated outputs flow down.}
 \label{fig:systolic}
@@ -182,7 +183,7 @@ Taking this further, in the \textbf{log-log domain}:
 
 Exponentiation becomes addition. Each additional log level converts a harder operation into simple add/subtract.
 
-\subsection{3\textsuperscript{3} Encoding}
+\subsection{\texorpdfstring{3\textsuperscript{3} Encoding}{3^3 Encoding}}
 
 Rather than adding hardware complexity, we increase effective throughput by having the NR-IOC \textbf{reinterpret} what each trit represents:
 
@@ -215,7 +216,7 @@ The NR-IOC knows which PE type it addresses and applies the correct interpretati
 
 \textbf{Important:} This is why the \textbf{9× throughput boost from 3\textsuperscript{3} encoding only applies to ADD/SUB operations}. We upgraded the ADD/SUB PEs to operate in log-log domain because addition remains addition, providing 9× more compute with the same hardware. MUL/DIV PEs cannot receive the same upgrade because traditional hardware cannot handle the requirements—see the following subsection for why this is mathematically beyond any physical computer.
 
-\subsection{Why 3\textsuperscript{3}\textsuperscript{3}\textsuperscript{3} Is Beyond Engineering}
+\subsection{\texorpdfstring{Why 3\textsuperscript{3}\textsuperscript{3}\textsuperscript{3} Is Beyond Engineering}{Why 3^3^3^3 Is Beyond Engineering}}
 
 Theoretically, MUL/DIV operations could achieve pure add/subtract at tower level 4 (3\textsuperscript{3}\textsuperscript{3}\textsuperscript{3}). However, this would require:
 
@@ -250,7 +251,7 @@ This is not future hardware—it is mathematically beyond any physical computer.
 
 \section{Performance Analysis}
 
-\subsection{Throughput with 3\textsuperscript{3} Encoding}
+\subsection{\texorpdfstring{Throughput with 3\textsuperscript{3} Encoding}{Throughput with 3^3 Encoding}}
 
 The 3\textsuperscript{3} encoding provides a 9$\times$ effective throughput increase for operations that benefit from it. However, \textbf{only ADD/SUB operations benefit}—MUL/DIV operations remain at baseline throughput. This distinction is critical for understanding real-world performance.
 
@@ -473,31 +474,17 @@ Traditional processors execute software—instructions stored in memory, interpr
 
 The optical compute core has no software. It is glass and waveguides. Computation is determined by the physical layout—where waveguides meet, how ring resonators are positioned, how light paths intersect. There is no instruction set to exploit, no firmware to corrupt, no memory to overflow.
 
-\textbf{To ``hack'' the optical core, you would need to physically alter the glass.}
+\subsection{What This Means in Practice}
 
-The optical compute core is immune to:
-\begin{itemize}
-\item \textbf{Remote code execution}: No code to execute in glass
-\item \textbf{Firmware attacks}: No firmware in the optical path
-\item \textbf{Persistent malware}: Cannot install software in waveguides
-\item \textbf{Logic manipulation}: Computation is fixed by geometry
-\end{itemize}
+The optical compute core has no software attack surface—but the overall system still requires traditional cybersecurity. An attacker who compromises the host computer, network interface, or NR-IOC could manipulate data going into or out of the optical core. Standard security practices remain essential for these components.
 
-\subsection{Important Limitations}
+What the attacker \emph{cannot} do is alter the computation itself. The optical core will always perform the exact operations defined by its physical geometry. There is no way to inject malicious logic, install persistent malware, or reprogram the accelerator remotely. To change what the optical core computes, you would need to physically alter the glass.
 
-We must be clear about what this does \emph{not} protect:
+\subsection{The Benefit}
 
-\begin{itemize}
-\item \textbf{System interfaces}: The NR-IOC, PCIe bus, and host system are electronic and require traditional security practices
-\item \textbf{Input/output manipulation}: An attacker who compromises the host could manipulate data before it reaches the optical core or after it returns
-\item \textbf{Manufacturing trust}: The foundry that fabricates the chip knows the geometry—supply chain security remains a consideration
-\end{itemize}
+For applications where computational integrity matters—cryptographic operations, secure enclaves, critical infrastructure—this provides a unique guarantee: \textbf{the compute logic cannot be remotely modified}. Even if an attacker fully compromises the host system, they cannot change what the optical core does, only what data it receives.
 
-The security model is analogous to a vault: the optical core (vault) cannot be breached remotely, but the building around it (interfaces, host system) still requires protection. Even if an attacker compromises the electronic interfaces, they cannot alter what the optical core computes—the geometry is physically fixed.
-
-\subsection{The Core Advantage}
-
-For high-assurance applications—cryptographic key storage, secure enclaves, critical infrastructure—the value is clear: \textbf{the compute logic itself has no software attack surface}. Traditional security protects the perimeter; optical geometry protects the core. Defense in depth with a physically immutable foundation.
+This is not a replacement for traditional security—it is an additional layer. The electronic interfaces (NR-IOC, PCIe, host system) require standard protection. Manufacturing trust and supply chain security remain considerations. But the optical core itself provides a physically immutable computational foundation that traditional processors cannot offer.
 
 \section{Conclusion}
 

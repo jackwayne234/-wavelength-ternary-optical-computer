@@ -40,7 +40,7 @@ try:
     RANK = MPI.COMM_WORLD.Get_rank()
     SIZE = MPI.COMM_WORLD.Get_size()
     IS_PARALLEL = SIZE > 1
-except ImportError:
+except (ImportError, RuntimeError, OSError):
     RANK = 0
     SIZE = 1
     IS_PARALLEL = False

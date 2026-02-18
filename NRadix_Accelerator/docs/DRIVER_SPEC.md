@@ -32,9 +32,9 @@ This document specifies the software driver interface for the Wavelength-Divisio
 │                   NR-IOC (N-Radix Input/Output Converter)            │
 │  ┌──────────────────────────────────────────────────────────────┐   │
 │  │                                                               │   │
-│  │   Binary Input ──▶ [ENCODE 3^3] ──▶ Ternary Optical Signals  │   │
-│  │                                                               │   │
-│  │   Binary Output ◀── [DECODE 3^3] ◀── Ternary Optical Signals │   │
+│  │   Binary Input ──▶ [ENCODE] ──▶ Ternary Optical Signals      │   │
+│  │                    (direct or log-domain per PE type)         │   │
+│  │   Binary Output ◀── [DECODE] ◀── Ternary Optical Signals    │   │
 │  │                                                               │   │
 │  └──────────────────────────────────────────────────────────────┘   │
 │                                                                      │
@@ -69,12 +69,11 @@ This document specifies the software driver interface for the Wavelength-Divisio
 
 2. **Encoding (Host → NR-IOC)**
    - Convert floating-point matrices to balanced ternary
-   - Apply 3^3 scaling (each trit represents trit³)
+   - Tag operations with PE type (ADD/SUB or MUL/DIV)
    - Pack trits efficiently for PCIe transfer
 
 3. **Decoding (NR-IOC → Host)**
    - Receive ternary results from NR-IOC
-   - Apply inverse 3^3 scaling
    - Convert back to floating-point
 
 4. **Command Interface**
@@ -136,36 +135,43 @@ def float_to_balanced_ternary(value, num_trits=9):
     return trits
 ```
 
-### 3^3 Encoding (The Key Part)
+### IOC Encoding
 
-The NR-IOC applies **3^3 encoding** - each trit represents **trit³** worth of value.
+The NR-IOC handles encoding/decoding based on PE type:
 
-**Driver responsibility:** The driver does NOT do the 3^3 math. The driver just:
+**Driver responsibility:** The driver just:
 1. Converts floats to balanced ternary
-2. Sends trits to NR-IOC
-3. NR-IOC handles the 3^3 interpretation internally
+2. Tags each operation with PE type (ADD or MUL)
+3. Sends trits to NR-IOC
+4. NR-IOC handles domain encoding internally
 
-**Why this matters:** The optical hardware operates on trits. The NR-IOC interprets those trits as trit³. The driver just needs to know the input/output value ranges are cubed.
+For **ADD/SUB PEs**: Direct encoding. Trits go in, trits come out. Straight ternary arithmetic.
+
+For **MUL/DIV PEs**: Log-domain encoding. The NR-IOC converts inputs to log₃ representation before sending to the optical chip. The hardware adds (which = multiplication in log domain). The NR-IOC exponentiates the result back. The driver doesn't need to know the details — just tag the operation correctly.
 
 ```python
-# Example: Sending value 0.5 to an ADD/SUB PE
-#
+# Example: ADD/SUB PE
 # Driver converts: 0.5 → balanced ternary trits
-# Driver sends: trits to NR-IOC
-# NR-IOC interprets: each trit as trit³ (3^3 encoding)
-# Optical chip: does add/subtract on optical signals
-# NR-IOC returns: result trits
-# Driver converts: trits → float (accounting for 3^3 range)
+# Driver sends: trits to NR-IOC (tagged as ADD)
+# Optical chip: adds optical signals
+# NR-IOC returns: result trits (direct)
+
+# Example: MUL/DIV PE
+# Driver converts: values → balanced ternary trits
+# Driver sends: trits to NR-IOC (tagged as MUL)
+# NR-IOC encodes: log₃(input) → wavelength
+# Optical chip: adds optical signals (= multiply in log domain)
+# NR-IOC decodes: 3^(result) → output trits
 ```
 
 ### Value Ranges
 
 | Mode | Trit Represents | Effective Range | Precision |
 |------|-----------------|-----------------|-----------|
-| Base (no scaling) | trit | [-1, +1] | ~1.58 bits/trit |
-| 3^3 encoding | trit³ | [-1, +1] | Same, but 9× compute density |
+| ADD/SUB | trit (direct) | [-1, +1] | ~1.58 bits/trit |
+| MUL/DIV | log₃(trit) | [-1, +1] | ~1.58 bits/trit |
 
-**Note:** The *range* stays [-1, +1] for normalized values. The 3^3 encoding affects how much *computational work* each operation represents, not the numeric range.
+**Note:** All PEs physically just add. The IOC determines meaning.
 
 ---
 
@@ -229,14 +235,14 @@ The CPU's 3-tier optical RAM system now serves double duty:
 
 The chip has two types of Processing Elements (both simple mixer + routing):
 
-| PE Type | What It Does | NR-IOC Interpretation |
-|---------|--------------|-------------------|
-| **ADD/SUB** | Optical add/subtract | trit³ = addition value |
-| **MUL/DIV** | Optical add/subtract (in log domain) | trit³ = multiplication value |
+| PE Type | What Hardware Does | NR-IOC Interpretation |
+|---------|-------------------|-------------------|
+| **ADD/SUB** | Optical add/subtract | Direct ternary addition/subtraction |
+| **MUL/DIV** | Optical add/subtract | Multiply/divide (log-domain: add exponents) |
 
-**Both use the same 3^3 encoding.** The NR-IOC knows which PE type it's talking to and interprets accordingly.
+**All PEs do the same physical operation: SFG addition.** The NR-IOC determines what that addition means by how it encodes inputs and decodes outputs.
 
-**Driver responsibility:** Tag each operation with its type (ADD or MUL) so the NR-IOC applies correct interpretation.
+**Driver responsibility:** Tag each operation with its type (ADD or MUL) so the NR-IOC applies correct encoding/decoding.
 
 ---
 
@@ -318,25 +324,23 @@ nrioc_wait_complete();
 
 ### Raw Numbers
 
-| Array Size | Base Performance | With 3^3 (ADD-heavy) | With 3^3 (Matrix Mul) |
-|------------|------------------|----------------------|----------------------|
-| 27×27 | 65 TFLOPS | 583 TFLOPS | ~117 TFLOPS |
-| 81×81 | 583 TFLOPS | 5.2 PFLOPS | ~1.0 PFLOPS |
-| 243×243 | 5.2 PFLOPS | 47 PFLOPS | ~9.4 PFLOPS |
+| Array Size | Base Performance (1 triplet) | With 6-triplet WDM |
+|------------|------------------------------|---------------------|
+| 9×9 | ~81 TOP/cycle | ~486 TOP/cycle |
+| 27×27 | 65 TFLOPS | ~390 TFLOPS |
+| 81×81 | 583 TFLOPS | ~3.5 PFLOPS |
+| 243×243 | 5.2 PFLOPS | ~31.2 PFLOPS |
 
-### Why Matrix Multiply is ~1.8×, Not 9×
+### Performance Advantages
 
-Matrix multiply is 50% multiply operations, 50% add operations.
-- ADD portion: 9× speedup (benefits from 3^3)
-- MUL portion: 1× (no speedup, stays at baseline)
-- Combined: ~1.8× using Amdahl's Law
+The radix economy bypass comes from stacking these advantages:
 
-| Workload | ADD % | MUL % | Overall Boost |
-|----------|-------|-------|---------------|
-| Matrix multiply | 50% | 50% | ~1.8× |
-| Transformer attention | 60% | 40% | ~2.1× |
-| Pure accumulation | 100% | 0% | 9× |
-| Pure multiply | 0% | 100% | 1× |
+| Advantage | Source | Factor |
+|-----------|--------|--------|
+| Optimal radix | Ternary (1.58 bits/trit vs 1 bit/bit) | ~1.58x |
+| Log domain | MUL/DIV → add/subtract (simpler hardware) | Enables all-add architecture |
+| WDM parallelism | 6 triplets through same glass | 6x |
+| Passive compute | No clock, no power in PE array | Lower power, higher density |
 
 ---
 

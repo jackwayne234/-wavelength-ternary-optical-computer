@@ -1,7 +1,7 @@
 # N-Radix Chip Packaging and Fiber Coupling Specification
 
-**Version:** 1.0
-**Date:** February 5, 2026
+**Version:** 1.1
+**Date:** February 18, 2026
 **Author:** Christopher Riner
 **Document Type:** Packaging House / Test Lab Specification
 
@@ -9,12 +9,14 @@
 
 ## 1. Overview
 
-This document specifies the packaging requirements for the N-Radix ternary optical processor chip. The chip is a photonic integrated circuit (PIC) fabricated on Lithium Niobate (LiNbO3) or Silicon Nitride (SiN) substrate, requiring optical fiber coupling for input and electrical connections for photodetector readout and thermal tuning.
+This document specifies the packaging requirements for the N-Radix ternary optical processor chip. The chip is a monolithic photonic integrated circuit (PIC) fabricated on thin-film Lithium Niobate (TFLN / X-cut LiNbO3), with an active IOC region and a passive accelerator region on one substrate. Requires optical fiber coupling for input and electrical connections for photodetector readout and thermal tuning.
 
-**Chip Function:** 81-trit optical ALU (ternary arithmetic logic unit)
-**Technology:** Silicon photonics with χ² nonlinear mixing
+**Chip Function:** 9×9 systolic array (81 PEs) — ternary optical accelerator
+**Technology:** LiNbO3 (TFLN) photonics with χ² nonlinear SFG mixing
 **Interface:** Optical input, electrical output
-**Architecture:** Simple PEs (mixer + routing) with weights STREAMED from optical RAM
+**Architecture:** Monolithic chip — IOC region (active) + passive accelerator region on one substrate. Weights streamed from optical RAM via waveguides.
+**PE Types:** ADD/SUB (straight ternary add/subtract) and MUL/DIV (log-domain addition → multiplication). All PEs physically perform SFG addition; the IOC determines interpretation.
+**Circuit Simulation:** 8/8 tests PASS (single PE, identity matrix, all-ones, single nonzero, mixed 3×3, tridiagonal, IOC domain modes, loss budget)
 
 ---
 
@@ -24,7 +26,7 @@ This document specifies the packaging requirements for the N-Radix ternary optic
 
 | Configuration | Die Size (mm) | Active Area (mm²) | Notes |
 |---------------|---------------|-------------------|-------|
-| Single ALU (1 trit) | 0.35 × 0.25 | 0.09 | Minimum test structure |
+| Single PE (1 trit) | 0.35 × 0.25 | 0.09 | Minimum test structure |
 | 9-trit nonad | 1.2 × 0.6 | 0.72 | Basic functional unit |
 | 27×27 systolic array | ~8 × 8 | 64 | Standard AI accelerator |
 | **81-trit full processor** | **3.6 × 5.4** | **19.4** | **Primary target** |
@@ -41,7 +43,7 @@ This document specifies the packaging requirements for the N-Radix ternary optic
 │   │                                 │   │
 │   │     Active Area: 3.2 × 4.8 mm   │   │
 │   │                                 │   │
-│   │        (81 trit ALUs in         │   │
+│   │        (81 PEs in               │   │
 │   │         3×3 nonad grid)         │   │
 │   │                                 │   │
 │   └─────────────────────────────────┘   │
@@ -126,7 +128,7 @@ For wafer-scale testing or applications requiring surface-normal coupling:
 
 | Category | Count (81-trit) | Layer | Function |
 |----------|-----------------|-------|----------|
-| Photodetector readout | 405 | (12, 0) | 5 outputs per ALU × 81 ALUs |
+| Photodetector readout | 405 | (12, 0) | 5 outputs per PE × 81 PEs |
 | Heater control | 486 | (10, 0) | Ring resonator tuning (if MZI) |
 | Carry chain I/O | 162 | (12, 0) | Carry in/out per trit |
 | Ground | 16+ | (12, 0) | Distributed ground pads |
@@ -146,7 +148,7 @@ For wafer-scale testing or applications requiring surface-normal coupling:
   T │   │      ACTIVE PHOTONIC           │       │ H
     │   │         REGION                 │       │ T
   E │   │                                │       │
-  D │   │   (81 ALUs in 3×3 grid)        │       │ E
+  D │   │   (81 PEs in 3×3 grid)         │       │ E
   G │   │                                │       │ D
   E │   │                                │       │ G
     │   └────────────────────────────────┘       │ E
@@ -160,7 +162,7 @@ For wafer-scale testing or applications requiring surface-normal coupling:
 
 ### 4.4 Photodetector Pad Arrangement
 
-Each ALU has 5 photodetector outputs arranged in a row:
+Each PE has 5 photodetector outputs arranged in a row:
 
 ```
 ┌─────┬─────┬─────┬─────┬─────┐
@@ -286,7 +288,7 @@ Each ALU has 5 photodetector outputs arranged in a row:
 
 | Package Type | Pros | Cons | Use Case |
 |--------------|------|------|----------|
-| Butterfly (14-pin) | Standard, proven | Limited I/O | Single ALU test |
+| Butterfly (14-pin) | Standard, proven | Limited I/O | Single PE test |
 | Custom hermetic | Full I/O, reliable | Higher cost | Production chip |
 | Gold box | Hermetic, robust | Very high cost | Aerospace/mil |
 | Open cavity | Cost-effective | Not hermetic | Lab/prototype |
@@ -330,14 +332,14 @@ For 81-trit processor (3.6 × 5.4 mm die):
     │                                              │  │
     │  ┌────────────────────────────────────────┐  │  │
     │  │ ZONE 6    │  ZONE 7    │   ZONE 8     │  │  │
-    │  │ (9 ALUs)  │  (9 ALUs)  │   (9 ALUs)   │  │  │
+    │  │ (9 PEs)   │  (9 PEs)   │   (9 PEs)    │  │  │
     │  ├───────────┼────────────┼──────────────┤  │  │
- ▼  │  │ ZONE 3    │[FRONTEND]  │   ZONE 5     │  │  3.6
- F  │  │ (9 ALUs)  │Kerr Clock  │   (9 ALUs)   │  │  mm
- I  │  │           │ + Y-junc   │              │  │  │
+ ▼  │  │ ZONE 3    │[IOC REGION]│   ZONE 5     │  │  3.6
+ F  │  │ (9 PEs)   │Kerr Clock  │   (9 PEs)    │  │  mm
+ I  │  │           │(IOC-only)  │              │  │  │
  B  │  ├───────────┼────────────┼──────────────┤  │  │
  E  │  │ ZONE 0    │  ZONE 1    │   ZONE 2     │  │  │
- R  │  │ (9 ALUs)  │  (9 ALUs)  │   (9 ALUs)   │  │  │
+ R  │  │ (9 PEs)   │  (9 PEs)   │   (9 PEs)    │  │  │
     │  └────────────────────────────────────────┘  │  │
  I  │                                              │  │
  N  │  ┌──┬──┬──┬──┬──┬──┬──┬──┬──┬──┬──┬──┬──┐   │  │
@@ -360,7 +362,7 @@ For 81-trit processor (3.6 × 5.4 mm die):
 |------|------|------------------------|---------|
 | input_a | Left | Y = 2.0 mm | Operand A input |
 | input_b | Left | Y = 1.4 mm | Operand B input |
-| (future) clock_out | Right | Y = 1.8 mm | Clock distribution (optional) |
+| monitor_out | Right | Y = 1.8 mm | Optical power monitor tap (diagnostic) |
 
 ### 8.3 Alignment Marks
 
@@ -431,7 +433,8 @@ Mark design: Cross pattern, 100 µm arms, 10 µm width
 **Designer:** Christopher Riner
 **Email:** chrisriner45@gmail.com
 **Repository:** https://github.com/jackwayne234/-wavelength-ternary-optical-computer
-**Paper:** DOI: 10.5281/zenodo.18437600
+**Paper v1 (Theory):** DOI: 10.5281/zenodo.18437600
+**Paper v2 (Architecture):** DOI: 10.5281/zenodo.18501296
 
 ---
 
@@ -440,6 +443,7 @@ Mark design: Cross pattern, 100 µm arms, 10 µm width
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2026-02-05 | Initial release |
+| 1.1 | 2026-02-18 | Updated PE types (ADD/SUB, MUL/DIV — all physically SFG addition). Circuit sim 8/8 PASS. Monolithic architecture (IOC + accelerator on one substrate). Kerr clock is IOC-internal only. Dropped 3^3 tower encoding. Added Paper v2 reference. Terminology: ALU → PE throughout. |
 
 ---
 
