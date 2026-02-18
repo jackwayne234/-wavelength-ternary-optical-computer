@@ -1,7 +1,7 @@
 # N-Radix Chip Interface Specification
 
-**Version:** 1.0
-**Date:** February 5, 2026
+**Version:** 1.1
+**Date:** February 18, 2026
 **Author:** Christopher Riner
 
 ---
@@ -39,14 +39,15 @@ This document specifies the physical interface to the N-Radix optical chip. The 
     │                                                       │
     │   Activations   ┌─────────────────┐                  │
     │   Waveguides ──►│  Systolic Array │──► Photodetectors│
-    │                 │   (27×27 or     │                  │
-    │   Weight        │    81×81 PEs)   │   Electrical     │
-    │   Stream ──────►│                 │   Outputs        │
-    │   (from         │   PEs = mixer   │                  │
-    │   optical RAM)  │   + routing     │                  │
-    │                 │   (no per-PE    │                  │
-    │   Kerr Clock    │   weight store) │                  │
-    │   (on-chip) ───►└─────────────────┘                  │
+    │                 │   (9×9 MVP,     │                  │
+    │   Weight        │    scales to    │   Electrical     │
+    │   Stream ──────►│    27×27/81×81) │   Outputs        │
+    │   (from         │                 │                  │
+    │   optical RAM)  │   PEs = mixer   │                  │
+    │                 │   + routing     │                  │
+    │   Kerr Clock    │   (no per-PE    │                  │
+    │   (IOC-internal)│   weight store) │                  │
+    │        ───►     └─────────────────┘                  │
     │                                                       │
     └──────────────────────────────────────────────────────┘
 ```
@@ -91,9 +92,11 @@ For 6× parallel computation through the same chip:
 - All SFG outputs: 505-665 nm (visible)
 - Collision-free: no wavelength overlaps
 
-**Validated:** FDTD simulation (Meep) confirmed all 18 wavelengths propagate independently through waveguides and a 3×3 PE array with no crosstalk (Feb 2026).
+**Status (Feb 2026):** FDTD simulation (Meep) confirmed all 18 wavelengths propagate independently through waveguides. However, circuit-level simulation revealed **cross-triplet PPLN coupling at 60nm spacing** -- adjacent triplet SFG efficiency is ~98%, meaning the PPLN crystal does not isolate triplets sufficiently at this spacing. Each triplet works perfectly in isolation.
 
-**Source options for 6 triplets:**
+**Conclusion: Single-triplet MVP is validated and fab-ready. Multi-triplet WDM is Phase 2** (requires per-triplet PPLN sections, separate waveguide lanes, or wider spacing).
+
+**Source options for 6 triplets (Phase 2):**
 - Frequency comb + AWG filtering
 - 18-channel DFB laser array
 - Supercontinuum source + filter bank
@@ -106,13 +109,18 @@ The chip has on-chip photodetectors. You read electrical signals, not optical.
 
 ### Photodetector Outputs
 
-| Signal | SFG Wavelength | Meaning |
-|--------|----------------|---------|
-| DET_-2 | ~775 nm (varies by triplet) | Overflow: borrow |
-| DET_-1 | ~681 nm | Result: -1 |
-| DET_0 | ~608 nm | Result: 0 |
-| DET_+1 | ~549 nm | Result: +1 |
-| DET_+2 | ~500 nm | Overflow: carry |
+For the MVP triplet (1550/1310/1064 nm), the 6 SFG products are:
+
+| Signal | SFG Wavelength | Input Combination | Meaning |
+|--------|----------------|-------------------|---------|
+| DET_-2 | 775.0 nm | RED+RED | Overflow: borrow |
+| DET_-1 | 710.0 nm | RED+GREEN | Result: -1 |
+| DET_0a | 655.0 nm | GREEN+GREEN | Result: 0 |
+| DET_0b | 630.9 nm | RED+BLUE | Result: 0 |
+| DET_+1 | 587.1 nm | GREEN+BLUE | Result: +1 |
+| DET_+2 | 532.0 nm | BLUE+BLUE | Overflow: carry |
+
+**Note:** Two distinct wavelengths encode "0" (655.0 and 630.9 nm). The AWG demux separates all 6 SFG outputs. Minimum spacing between adjacent outputs: 24.1 nm.
 
 **Electrical interface:**
 - Photocurrent output (requires TIA)
@@ -126,7 +134,7 @@ The chip has on-chip photodetectors. You read electrical signals, not optical.
 | Bandwidth | >1 GHz | Headroom for 617 MHz clock |
 | Transimpedance | 10-100 kΩ | Balance gain vs bandwidth |
 | Input noise | <10 pA/√Hz | Low noise for weak signals |
-| Channels | 5 per PE output | DET_-2 through DET_+2 |
+| Channels | 6 per PE output | DET_-2 through DET_+2 (two channels for 0) |
 
 ---
 
@@ -153,24 +161,24 @@ The chip has on-chip photodetectors. You read electrical signals, not optical.
 
 ## Timing
 
-### Kerr Clock (On-Chip)
+### Kerr Clock (IOC-Internal)
 
-The chip has an internal optical clock based on Kerr self-pulsing:
+The chip has an internal optical clock based on Kerr self-pulsing. The clock is **IOC-internal only** -- it does not distribute to the passive accelerator PEs. Photon arrival synchronization at PEs is achieved through matched waveguide path lengths (timing is geometry, not clock distribution).
 
 | Parameter | Value |
 |-----------|-------|
 | Frequency | 617 MHz |
-| Location | Chip center |
-| Distribution | H-tree to all PEs |
-| Skew | <5% of period (validated at 27×27) |
+| Location | IOC region (chip edge) |
+| Distribution | IOC-internal only (no H-tree to PEs) |
+| PE synchronization | Matched waveguide path lengths (validated: 0.000 ps spread) |
 
 ### NR-IOC Timing Requirements
 
 | Parameter | Requirement |
 |-----------|-------------|
 | Input modulation rate | Synchronize to 617 MHz (or submultiple) |
-| Setup time | TBD (depends on waveguide length) |
-| Hold time | TBD |
+| Path length matching | Activation and weight paths equalized on-chip (0.000 ps spread validated) |
+| Latency (9×9) | ~9 clock cycles for full systolic pass |
 | Latency (27×27) | ~27 clock cycles for full systolic pass |
 | Latency (81×81) | ~81 clock cycles for full systolic pass |
 
@@ -180,26 +188,27 @@ The chip has an internal optical clock based on Kerr self-pulsing:
 
 ## Array Size Independence
 
-**The same NR-IOC design works for both 27×27 and 81×81 chips.**
+**The same NR-IOC design works for all chip sizes.**
 
-| Chip | PEs | Latency | NR-IOC Changes |
-|------|-----|---------|----------------|
-| 27×27 | 729 | 27 clocks | None |
-| 81×81 | 6,561 | 81 clocks | None |
+| Chip | PEs | Latency | NR-IOC Changes | Status |
+|------|-----|---------|----------------|--------|
+| **9×9 (MVP)** | 81 | 9 clocks | Baseline | Circuit sim 8/8 PASS, fab-ready |
+| 27×27 | 729 | 27 clocks | None | Architecture validated |
+| 81×81 | 6,561 | 81 clocks | None | FDTD validated |
 
-The NR-IOC interface (wavelengths, photodetector readout) is identical. Only the computation latency and data volume differ.
+The NR-IOC interface (wavelengths, photodetector readout) is identical across all sizes. Only the computation latency and data volume differ. The 9x9 monolithic chip (1095 x 695 um on X-cut LiNbO3) is the current fabrication target.
 
 ---
 
 ## Upgrade Path
 
-| Stage | Lasers | Triplets | Cost | Performance |
-|-------|--------|----------|------|-------------|
-| **MVP** | 3 | 1 | ~$1k | 1× baseline |
-| **Expanded** | 6 | 2 | ~$2k | 2× parallel |
-| **Full** | 18 | 6 | ~$10-30k | 6× parallel |
+| Stage | Lasers | Triplets | Cost | Performance | Status |
+|-------|--------|----------|------|-------------|--------|
+| **MVP** | 3 | 1 | ~$1k | 1× baseline | Fab-ready (8/8 tests PASS) |
+| **Expanded** | 6 | 2 | ~$2k | 2× parallel | Phase 2 (cross-coupling issue at 60nm spacing) |
+| **Full** | 18 | 6 | ~$10-30k | 6× parallel | Phase 2 (requires per-triplet PPLN sections) |
 
-Start with MVP. Prove the chip works. Add triplets for more parallelism without changing the chip.
+Start with MVP. Prove the chip works. Multi-triplet parallelism requires solving the cross-triplet PPLN coupling issue (Phase 2).
 
 ---
 
@@ -261,16 +270,76 @@ The chip is passive. It does NOT require:
 
 ---
 
+## PE Types: ADD/SUB and MUL/DIV
+
+**All PEs physically just add.** The IOC (controller) determines the meaning.
+
+| PE Mode | What the IOC Sends | What the PE Does | What the IOC Reads Back |
+|---------|--------------------|--------------------|------------------------|
+| **ADD/SUB** | Straight ternary values a, b | Ternary addition (SFG) | a + b (or a - b via complement) |
+| **MUL/DIV** | log(a), log(b) | Ternary addition (SFG) | log(a) + log(b) = log(a * b), IOC computes antilog |
+
+**Key insight:** The glass never multiplies or divides. It just adds. Complexity lives in the IOC firmware, not the hardware.
+
+- **ADD/SUB PEs** perform straight ternary addition and subtraction (subtraction via ternary complement encoding)
+- **MUL/DIV PEs** perform log-domain addition, which the IOC interprets as multiplication. The IOC encodes log(a) and log(b) before sending, then takes the antilog of the result
+
+The physical signals through the chip are identical in both modes -- the same SFG mixing happens regardless. Only the IOC's pre-encoding and post-decoding differs. This means PE mode is a software/firmware concept, not a hardware distinction.
+
+**Validated:** Circuit simulation test 7/8 ("IOC Domain Modes") confirms physical signal identity between ADD and MUL modes.
+
+---
+
+## Validation Status
+
+### Circuit-Level Simulation: 8/8 Tests PASS (Single Triplet)
+
+Full-chip SAX-based circuit simulation of the monolithic 9x9 chip:
+
+| Test | Description | Result |
+|------|-------------|--------|
+| 1. Single PE multiplication table | All 9 trit*trit combinations | PASS |
+| 2. Identity matrix | 9x9 identity input | PASS |
+| 3. All-ones | Uniform input stress test | PASS |
+| 4. Single nonzero | Isolation / crosstalk check | PASS |
+| 5. Mixed 3x3 | Realistic mixed values | PASS |
+| 6. Tridiagonal Laplacian | Sparse matrix pattern | PASS |
+| 7. IOC domain modes | ADD vs MUL mode equivalence | PASS |
+| 8. Loss budget | Worst-case power margin | PASS (17.6 dB at PE[0,8]) |
+
+### Monolithic 9x9 Architecture: 5/5 Checks PASS
+
+| Check | Result | Value |
+|-------|--------|-------|
+| Activation path matching | PASS | 0.000 ps spread |
+| Weight path equalization | PASS | 0.000 ps spread |
+| Loss budget | PASS | 18.70 dB margin |
+| Timing skew | PASS | 0.0000% of clock |
+| Wavelength collision-free | PASS | Min spacing: 24.1 nm |
+
+### Additional Analyses Complete
+
+| Analysis | Result |
+|----------|--------|
+| Monte Carlo (10,000 trials) | 99.82% yield |
+| Thermal sensitivity | 30 C passive window (15-45 C) |
+| 6-triplet WDM | Cross-coupling at 60nm spacing -- single triplet fab-ready, multi-triplet Phase 2 |
+
+---
+
 ## Files Reference
 
 | File | Description |
 |------|-------------|
-| `nradix-driver/` | Driver software and simulator |
+| `NRadix_Accelerator/architecture/monolithic_chip_9x9.py` | 9x9 monolithic chip generator + validation |
+| `NRadix_Accelerator/circuit_sim/simulate_9x9.py` | Full-chip circuit simulation (8/8 tests) |
+| `NRadix_Accelerator/circuit_sim/simulate_6triplet.py` | 6-triplet WDM simulation |
+| `NRadix_Accelerator/circuit_sim/demo.py` | Interactive Tkinter GUI demo |
+| `NRadix_Accelerator/driver/` | Driver software (C source + Python bindings) |
 | `docs/DRIVER_SPEC.md` | Full NR-IOC driver specification |
 | `docs/DRIVER_CHEATSHEET.md` | Quick reference |
-| `Research/programs/nradix_architecture/` | Architecture documentation |
-| `Research/data/gds/optical_systolic_27x27.gds` | 27×27 chip layout |
-| `Research/data/gds/optical_systolic_81x81.gds` | 81×81 chip layout |
+| `docs/MONOLITHIC_9x9_VALIDATION.md` | 9x9 architecture validation report |
+| `docs/TAPEOUT_READINESS.md` | Tape-out readiness checklist (all 5 gaps resolved) |
 
 ---
 

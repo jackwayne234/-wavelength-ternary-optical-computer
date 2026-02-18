@@ -1,11 +1,12 @@
 # Design Rule Check (DRC) Specification
 ## N-Radix Wavelength-Division Ternary Optical Chip
 
-**Version:** 1.0
-**Date:** February 5, 2026
+**Version:** 1.1
+**Date:** February 18, 2026
 **Platform:** X-cut LiNbO3 (Lithium Niobate)
 **Chip Size:** 10mm x 10mm
 **Feature Size:** 500nm minimum
+**Validation:** Circuit simulation 8/8 PASS | Monte Carlo 99.82% yield (10,000 trials) | Thermal 15-45C passive window
 
 ---
 
@@ -379,16 +380,23 @@ DFG.space(10.um).output("SP.6", "DFG region spacing < 10 um")
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0 | 2026-02-05 | C. Riner | Initial release |
+| 1.1 | 2026-02-18 | C. Riner | Updated to reflect circuit sim 8/8 PASS, Monte Carlo 99.82% yield, thermal analysis complete. Added references to validation documents. |
 
 ---
 
 ## 13. References
 
-- Process Traveler: `/Research/data/gds/masks/process_traveler.md`
-- Design Summary: `/Phase3_Chip_Simulation/DESIGN_SUMMARY.md`
+- Process Traveler: `Research/data/gds/masks/process_traveler.md`
+- Design Summary: `CPU_Phases/Phase3_Chip_Simulation/DESIGN_SUMMARY.md`
+- Circuit Simulation (8/8 PASS): `NRadix_Accelerator/circuit_sim/simulate_9x9.py`
+- Circuit Simulation Plan: `NRadix_Accelerator/docs/CIRCUIT_SIMULATION_PLAN.md`
+- Monte Carlo Analysis (99.82% yield): `NRadix_Accelerator/docs/MONTE_CARLO_ANALYSIS.md`
+- Thermal Sensitivity (15-45C passive): `NRadix_Accelerator/docs/THERMAL_SENSITIVITY.md`
+- Layer Mapping (5 foundries): `NRadix_Accelerator/docs/LAYER_MAPPING.md`
+- Monolithic 9x9 Validation: `NRadix_Accelerator/docs/MONOLITHIC_9x9_VALIDATION.md`
 - GDSFactory Generic PDK documentation
 - LiNbO3 photonic process design rules
 
 ---
 
-*Generated for N-Radix Wavelength-Division Ternary Optical Computer Project*
+*N-Radix Wavelength-Division Ternary Optical Computer Project -- updated 2026-02-18*

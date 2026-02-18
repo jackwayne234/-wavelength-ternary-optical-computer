@@ -26,7 +26,7 @@ Binary (PCIe) → NR-IOC → Optical Chip → NR-IOC → Binary (PCIe)
 
 ## Encoding
 
-**3^3 for everything.** NR-IOC interprets based on PE type.
+**IOC interprets based on PE type.** ADD/SUB = direct ternary. MUL/DIV = log domain (add/sub of exponents).
 
 ```python
 # Float [-1,1] → 9 trits
@@ -79,15 +79,14 @@ PEs are simple (mixer + routing only) - no per-PE weight storage.
 
 ---
 
-## Performance
+## PE Types
 
-| Workload | Boost |
-|----------|-------|
-| Matrix mul | **~1.8×** |
-| Attention | ~2.1× |
-| Pure add | 9× |
+| PE Type | What It Does | How |
+|---------|-------------|-----|
+| ADD/SUB | Ternary add/subtract | Direct — hardware adds |
+| MUL/DIV | Ternary multiply/divide | Log domain — hardware adds exponents, IOC exponentiates |
 
-**Why not 9× for everything?** MUL stays at baseline. Only ADD gets the boost.
+**All PEs physically just add.** The IOC decides what "add" means.
 
 ---
 

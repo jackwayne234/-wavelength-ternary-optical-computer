@@ -1,7 +1,7 @@
 # Layer Mapping Reference
 
 **Wavelength-Division Ternary Optical Computer**
-**Version 1.0 | February 5, 2026**
+**Version 1.1 | February 18, 2026**
 
 This document provides the definitive layer mapping for foundry submission. Use this to adapt the generic GDS design to any foundry's process design kit (PDK).
 
@@ -498,9 +498,12 @@ See `process_traveler.md` for complete fabrication sequence.
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2026-02-05 | Initial release - comprehensive layer mapping |
+| 1.1 | 2026-02-18 | Updated for circuit sim validation (8/8 PASS). Added Paper v2 DOI. No layer changes. |
 
 ---
 
 *Generated for the Wavelength-Division Ternary Optical Computer Project*
-*Paper: DOI 10.5281/zenodo.18437600*
+*Paper v1 (Theory): DOI 10.5281/zenodo.18437600*
+*Paper v2 (Architecture): DOI 10.5281/zenodo.18501296*
 *Repository: https://github.com/jackwayne234/-wavelength-ternary-optical-computer*
+*Circuit simulation: 8/8 tests PASS | Monte Carlo: 99.82% yield (10,000 trials) | Thermal: 15-45°C passive window*

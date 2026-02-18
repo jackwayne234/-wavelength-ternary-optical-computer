@@ -1,0 +1,28 @@
+Monte Carlo Process Variation Analysis Results
+Date: 2026-02-17
+Trials: 10000
+Seed: 42
+
+Overall Yield: 99.82%
+
+Per-Check Yields:
+  Loss Budget:          100.00%
+  Wavelength Collision:  100.00%
+  Ring Tuning:           99.82%
+  Path Timing:           100.00%
+  SFG Phase Matching:    100.00%
+
+Worst-Case Margins:
+  Loss Budget:          +12.18 dB
+  Wavelength Collision:  +4.00 nm
+  Ring Tuning:           -1.10 nm
+  Path Timing:           +80.94 ps
+  SFG Phase Matching:    +3.00 dB
+
+Sensitivity Ranking:
+  Refractive Index          |r| = 0.0212
+  Waveguide Width           |r| = 0.0166
+  Coupling Gap              |r| = 0.0081
+  Etch Depth                |r| = 0.0073
+  Prop Loss                 |r| = 0.0050
+  PPLN Period               |r| = 0.0004
