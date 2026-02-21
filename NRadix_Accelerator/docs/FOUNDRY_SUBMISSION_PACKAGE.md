@@ -1,8 +1,8 @@
 # Turnkey Foundry Submission Package
 # Monolithic 9x9 N-Radix Ternary Optical Processor
 
-**Version:** 1.1
-**Date:** February 18, 2026
+**Version:** 1.2
+**Date:** February 21, 2026
 **Author:** Christopher Riner
 **Branch:** fab/9x9-monolithic-tape-out
 **Status:** READY TO SEND when funding clears
@@ -13,6 +13,13 @@
 > "GDS is at the foundry" in 24 hours. Pre-written emails, file lists, cost breakdowns,
 > timelines, and contingency plans. Print it, check boxes, execute.
 
+> **Update 2026-02-21:** Isolated-lane architecture validated. Each SFG pair now gets a
+> dedicated PPLN waveguide, eliminating cross-talk and SHG suppression requirements.
+> Full 6-lane FDTD integration test: **36/36 PASS** across all 6 wavelength triplets
+> (1000–1340 nm inputs, 500–670 nm SFG outputs). Material model fixed: Sellmeier equation
+> corrected (Zelmon et al. coefficients), FDTD-stable single-pole Lorentzian fit with
+> f₀=3.5 below stability boundary. QPM periods range 5.01–13.30 μm across triplets.
+>
 > **Update 2026-02-18:** Circuit simulation is COMPLETE (8/8 tests PASS). Single-triplet
 > MVP is fab-ready. 6-triplet WDM cross-coupling was found during simulation -- multi-triplet
 > operation is deferred to Phase 2. The 3^3 encoding scheme (tower levels, 27-state cubing)
@@ -52,6 +59,8 @@ Every box must be checked before the GDS leaves the building.
 - [x] Functional test plan complete (3 test levels, 9 PE tests)
 - [x] Test bench BOM complete (4 budget tiers, $1.8k-$16.5k)
 - [x] Circuit-level simulation (SAX) -- COMPLETE, 8/8 tests PASS
+- [x] 6-lane IOC FDTD integration test -- COMPLETE, 36/36 PASS (isolated-lane architecture)
+- [x] Sellmeier material model corrected (Zelmon et al. coefficients, FDTD-stable Lorentzian)
 - [ ] Final GDS regenerated from latest parameters
 - [ ] GDS passes KLayout DRC with zero violations
 - [ ] GDS layer mapping remapped to target foundry PDK
@@ -170,14 +179,14 @@ REPO: https://github.com/jackwayne234/-wavelength-ternary-optical-computer
 | **Expected lead time** | 3-6 months from tape-out to die return |
 | **Cost range** | $10,000-$30,000 for MPW slot (estimate based on similar TFLN foundries) |
 | **Key capabilities** | Periodic poling (PPLN), EO modulators, low-loss waveguides (<1 dB/cm), heater metallization |
-| **What to confirm** | Photodetector integration (Ge or InGaAs hybrid), minimum poling period (need 6.5-7.0 um), die size limits |
+| **What to confirm** | Photodetector integration (for 500-670 nm visible), minimum poling period (need 5.0 um), maximum poling period (need 13.3 um), die size limits (need 3.6 x 5.4 mm) |
 | **Special requirements** | May require NDA before sharing PDK; ask about design review service |
 
 **HyperLight submission checklist:**
 - [ ] Contact via website/email with inquiry (use email template from Section 4.1)
 - [ ] Request PDK and design rules
-- [ ] Confirm PPLN poling capability at 6.5-7.0 um period
-- [ ] Confirm photodetector option (hybrid Ge or InGaAs at 500-775 nm)
+- [ ] Confirm PPLN poling capability at 5.0-13.3 um periods
+- [ ] Confirm photodetector option for visible range (500-670 nm)
 - [ ] Remap GDS layers to their PDK
 - [ ] Submit design package
 - [ ] Pay deposit
@@ -257,39 +266,53 @@ a proof-of-concept chip through your foundry services.
 PROJECT SUMMARY:
 
 The design is a monolithic 9x9 ternary systolic array processor on
-thin-film lithium niobate (TFLN). It encodes ternary logic states
-(-1, 0, +1) as three wavelengths (1550, 1310, 1064 nm) and performs
+thin-film lithium niobate (TFLN). It uses 6 collision-free wavelength
+triplets (1000-1340 nm, 20 nm intra-triplet / 60 nm inter-triplet
+spacing) to encode ternary logic states (-1, 0, +1) and performs
 arithmetic via sum-frequency generation in periodically poled LiNbO3
-(PPLN) regions. The architecture has been validated through Meep FDTD
-simulation and analytical modeling, with two peer-reviewed publications
-on Zenodo.
+(PPLN) waveguides. Each SFG pair uses an isolated (dedicated) PPLN
+waveguide for clean operation. The architecture has been validated
+through Meep FDTD simulation (36/36 SFG combinations PASS), SAX
+circuit simulation (8/8 tests PASS), and analytical modeling, with
+two publications on Zenodo.
 
 KEY SPECIFICATIONS:
 
-- Die size: 1095 x 695 um (monolithic, single substrate)
-- Array: 9x9 = 81 Processing Elements
-- Waveguide: 0.5 um wide, single-mode at all operating wavelengths
-- Critical feature: PPLN periodic poling (6.5-7.0 um period, 26 um length)
-- Photodetectors: 5 per PE output (visible range, 532-775 nm SFG products)
+- Die size: 3.6 x 5.4 mm (monolithic, single substrate)
+- Active area: 3.2 x 4.8 mm
+- Array: 9x9 = 81 Processing Elements, 6 parallel WDM lanes each
+- Waveguide: 0.5 um wide x 0.4 um etch, single-mode
+- Critical feature: PPLN periodic poling (5.0-13.3 um periods, 20 um length)
+- Architecture: Isolated lanes (dedicated PPLN waveguide per SFG pair)
+- SFG output wavelengths: 500-670 nm (visible)
 - Heater metallization: TiN for ring resonator tuning
 - Bond pads: ~1100 pads (100x100 um, Ti/Au)
 - Monte Carlo predicted yield: 99.82% (10,000 trials)
 - Power margin: 18.70 dB
 
+WAVELENGTH PLAN (6 triplets):
+
+  T1: 1000/1020/1040 nm -> SFG 500-520 nm, QPM 5.0-5.7 um
+  T2: 1060/1080/1100 nm -> SFG 530-550 nm, QPM 6.1-6.9 um
+  T3: 1120/1140/1160 nm -> SFG 560-580 nm, QPM 7.4-8.3 um
+  T4: 1180/1200/1220 nm -> SFG 590-610 nm, QPM 8.8-9.8 um
+  T5: 1240/1260/1280 nm -> SFG 620-640 nm, QPM 10.3-11.5 um
+  T6: 1300/1320/1340 nm -> SFG 650-670 nm, QPM 12.1-13.3 um
+
 WHAT I NEED:
 
-1. MPW slot for one die (~1.1 x 0.7 mm) plus PCM test structures
-2. PPLN periodic poling at 6.5-7.0 um period
-3. Photodetector integration (Ge or InGaAs for 500-775 nm range)
+1. MPW slot for one die (~3.6 x 5.4 mm) plus PCM test structures
+2. PPLN periodic poling at periods ranging 5.0-13.3 um
+3. Photodetector integration (for 500-670 nm visible SFG outputs)
 4. Heater metallization (TiN)
 5. Bond pad metallization (Ti/Au)
 
 QUESTIONS:
 
-1. Does your platform support PPLN poling at 6.5-7.0 um period for SFG
-   at the wavelengths listed above?
-2. What photodetector options are available for the visible/near-IR
-   range (532-775 nm)?
+1. Does your platform support PPLN poling at 5.0-13.3 um periods for
+   SFG at the wavelengths listed above?
+2. What photodetector options are available for the visible range
+   (500-670 nm)?
 3. What is your current MPW schedule and pricing?
 4. Do you offer design review before tape-out?
 5. What PDK and design rules should I target?
@@ -332,10 +355,10 @@ structures through your MPW program.
 
 PROJECT:
 
-The design is a ternary optical processor that uses three wavelengths
-(1550, 1310, 1064 nm) to encode data and relies on passive photonic
-components (waveguides, ring resonators, AWG demultiplexers,
-photodetectors) for signal routing and readout.
+The design is a ternary optical processor that uses 6 wavelength triplets
+(1000-1340 nm range, 18 wavelengths total) to encode data and relies on
+passive photonic components (waveguides, ring resonators, AWG
+demultiplexers, photodetectors) for signal routing and readout.
 
 I understand that your silicon/SiN platform does not support native
 chi-2 nonlinear optics. However, I would like to validate the PASSIVE
@@ -343,11 +366,11 @@ portion of my design using your process:
 
 COMPONENTS TO TEST:
 
-1. Waveguide propagation loss at 1550, 1310, and 1064 nm (cutback structures)
+1. Waveguide propagation loss at 1000-1340 nm (cutback structures)
 2. Ring resonator Q-factor and extinction ratio (sweep of radii and gaps)
 3. AWG demultiplexer (5-channel, visible range)
 4. MMI couplers (1x2, 2x2 splitters)
-5. Ge photodetector responsivity at 500-775 nm
+5. Ge photodetector responsivity at 500-670 nm
 6. Spot-size converters for edge coupling
 
 SLOT SIZE NEEDED: 5x5 mm (small MPW slot) for test structures only
@@ -433,10 +456,14 @@ ATTACHED FILES:
 
 DESIGN HIGHLIGHTS:
 
-- Die size: 1095 x 695 um
-- 81 PEs (9x9 systolic array)
+- Die size: 3.6 x 5.4 mm
+- 81 PEs (9x9 systolic array), 6 parallel WDM lanes each
+- Isolated-lane architecture (dedicated PPLN per SFG pair)
+- 6 wavelength triplets (1000-1340 nm), SFG outputs 500-670 nm
+- PPLN QPM periods: 5.0-13.3 um
 - 7 active layers + alignment marks
 - Monte Carlo yield: 99.82% at 10,000 trials
+- 6-lane IOC FDTD validation: 36/36 PASS
 - Power margin: 18.70 dB
 - All validation checks PASS
 
@@ -556,7 +583,7 @@ The moment someone says "yes" and money is available:
 
 | Action | Cost | Notes |
 |--------|------|-------|
-| Order laser sources (Thorlabs DFB1550L, DFB1310, FPL1064S) | $1,150 | Ships 1-3 days from Thorlabs |
+| Order laser sources (tunable or fixed DFB covering 1000-1340 nm range, 18 wavelengths across 6 triplets) | $1,150-$3,000 | Ships 1-3 days from Thorlabs; may need tunable source for full coverage |
 | Order laser driver components (WLD3343 x3, butterfly sockets) | $300 | DIY path; or $4,500 for CLD1015 x3 |
 | Order Red Pitaya STEMlab 125-14 (FPGA + ADC) | $300 | Ships ~1 week |
 | Order MicroBlock 3-axis stage (Thorlabs MBT616D) | $350 | Ships 1-3 days |
@@ -628,8 +655,8 @@ During this time, Christopher cannot affect foundry schedule but can:
 | # | Risk | Probability | Impact | Mitigation | Contingency |
 |---|------|-------------|--------|------------|-------------|
 | T1 | Foundry rejects design (DRC violations, unsupported features) | Medium | High | Run foundry-specific DRC before submission; request design review call; ask foundry to flag issues before tape-out | Fix violations and resubmit on next MPW run. Budget for 1 re-spin ($10k-$30k extra). |
-| T2 | PPLN poling period not achievable at foundry | Low | Critical | HyperLight has native PPLN capability; confirm specific period (6.5-7.0 um) in initial inquiry | If HyperLight cannot do it: (a) adjust wavelength triplet to match their available period, (b) try a different foundry, or (c) use external poling on a blank LNOI wafer patterned by ANT. |
-| T3 | Photodetectors not available at 532-775 nm | Medium | High | These are visible-range wavelengths; standard Ge detectors are optimized for 1300-1600 nm. Need InGaAs or Si-Ge for visible. | If hybrid detectors are unavailable: (a) use external fiber-coupled photodiodes off-chip (adds packaging complexity but works), (b) redesign output for grating couplers to off-chip detectors. |
+| T2 | PPLN poling period not achievable at foundry | Low | Critical | HyperLight has native PPLN capability; confirm specific periods (5.0-13.3 um range across 6 triplets) in initial inquiry | If HyperLight cannot do it: (a) adjust wavelength triplets to match their available periods, (b) try a different foundry, or (c) use external poling on a blank LNOI wafer patterned by ANT. |
+| T3 | Photodetectors not available at 500-670 nm | Medium | High | These are visible-range wavelengths; standard Ge detectors are optimized for 1300-1600 nm. Need Si photodiodes for visible. | If on-chip detectors are unavailable: (a) use external fiber-coupled Si photodiodes off-chip (adds packaging complexity but works), (b) redesign output for grating couplers to off-chip detectors. |
 | T4 | First chips do not compute correctly | Medium | Medium | Monte Carlo shows 99.82% yield. Test PCM structures first to isolate component-level issues. | Follow FUNCTIONAL_TEST_PLAN.md diagnosis flowchart: (1) Check fiber coupling, (2) Verify waveguide transmission, (3) Test ring resonators individually, (4) Isolate single PE, (5) Check SFG output wavelength. Data from failed chips is still valuable for the next spin. |
 | T5 | SFG conversion efficiency too low to detect | Low | High | Loss budget shows 18.70 dB margin. Monte Carlo includes SFG efficiency variation. | Increase laser input power (up to 100 mW). Use lock-in amplifier for weak-signal detection. Lengthen PPLN section in next spin. |
 | T6 | Waveguide loss much higher than expected | Low | Medium | PCM cutback structures will measure actual loss. Design has 18.70 dB margin absorbing up to ~15 dB extra loss. | If loss is extreme (>10 dB/cm): indicates process issue. Work with foundry to diagnose. May need wider waveguides or different etch recipe. |
@@ -717,19 +744,22 @@ Print this card. Tape it to the wall.
         N-RADIX 9x9 MONOLITHIC CHIP -- QUICK REFERENCE
 ================================================================
 
-CHIP: 1095 x 695 um, 81 PEs, X-cut LiNbO3 (TFLN)
+CHIP: 3.6 x 5.4 mm, 81 PEs, X-cut LiNbO3 (TFLN)
 GDS:  python architecture/monolithic_chip_9x9.py
 
-WAVELENGTHS:
-  Input:  1550 nm (-1), 1310 nm (0), 1064 nm (+1)
-  SFG:   532, 587, 631, 655, 710, 775 nm
+ARCHITECTURE: Isolated-lane (dedicated PPLN per SFG pair)
+
+WAVELENGTHS (6 collision-free triplets, 20nm intra / 60nm inter):
+  T1: 1000/1020/1040 nm -> SFG 500-520 nm, QPM 5.0-5.7 um
+  T2: 1060/1080/1100 nm -> SFG 530-550 nm, QPM 6.1-6.9 um
+  T3: 1120/1140/1160 nm -> SFG 560-580 nm, QPM 7.4-8.3 um
+  T4: 1180/1200/1220 nm -> SFG 590-610 nm, QPM 8.8-9.8 um
+  T5: 1240/1260/1280 nm -> SFG 620-640 nm, QPM 10.3-11.5 um
+  T6: 1300/1320/1340 nm -> SFG 650-670 nm, QPM 12.1-13.3 um
 
 PE TYPES (all physically add; IOC determines meaning):
   ADD/SUB: straight ternary addition/subtraction
   MUL/DIV: log-domain addition = multiplication
-
-PERFORMANCE (243x243, single triplet): 5.2 PFLOPS @ ~20W
-  With 6-triplet WDM: ~31 PFLOPS (Phase 2 -- cross-coupling TBD)
 
 VALIDATION:
   Path match:     PASS (0.000 ps spread)
@@ -739,6 +769,11 @@ VALIDATION:
   Monte Carlo:    PASS (99.82% yield, 10,000 trials)
   Thermal:        PASS (30 C passive window)
   Circuit sim:    PASS (8/8 tests, SAX)
+  6-lane IOC:     PASS (36/36 SFG pairs, isolated-lane FDTD)
+
+MATERIAL MODEL: Sellmeier (Zelmon et al. 1997)
+  n^2 = 1 + B1*L^2/(L^2-C1^2) + B2*L^2/(L^2-C2^2)
+  FDTD: single-pole Lorentzian, f0=3.5 (below stability boundary)
 
 PAPERS:
   Theory:   DOI 10.5281/zenodo.18437600
