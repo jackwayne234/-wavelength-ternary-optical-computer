@@ -718,6 +718,101 @@ def save_results(all_results, total_time, output_dir):
     print_master(f"  Results: {path}")
 
 
+def run_parallel_triplets(output_dir, python_bin, n_cores):
+    """
+    Run all 6 triplets as parallel subprocesses, each using a share of cores.
+    This is the fastest approach — 6 independent simulations running concurrently.
+    """
+    import subprocess
+    import json
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Divide cores among 6 triplets
+    cores_per_triplet = max(1, n_cores // 6)
+    remaining = n_cores - (cores_per_triplet * 6)
+
+    print(f"\n{'#'*70}")
+    print(f"#  PARALLEL 6-LANE IOC INTEGRATION TEST")
+    print(f"#  Running 6 triplets concurrently")
+    print(f"#  Total cores: {n_cores}, per triplet: {cores_per_triplet}")
+    print(f"{'#'*70}\n")
+
+    script_path = os.path.abspath(__file__)
+    procs = []
+
+    for tid in range(1, 7):
+        env = os.environ.copy()
+        env['OMP_NUM_THREADS'] = str(cores_per_triplet + (1 if tid <= remaining else 0))
+        # Disable MPI for subprocess mode — use OpenMP only
+        env['MEEP_NUM_THREADS'] = env['OMP_NUM_THREADS']
+
+        triplet_output = os.path.join(output_dir, f'T{tid}')
+        os.makedirs(triplet_output, exist_ok=True)
+
+        cmd = [python_bin, script_path,
+               '--triplet', str(tid),
+               '--output', triplet_output]
+
+        log_path = os.path.join(triplet_output, f'T{tid}_log.txt')
+        log_file = open(log_path, 'w')
+
+        print(f"  Starting T{tid} ({env['OMP_NUM_THREADS']} threads) → {log_path}")
+        proc = subprocess.Popen(cmd, env=env, stdout=log_file, stderr=subprocess.STDOUT)
+        procs.append((tid, proc, log_file, log_path))
+
+    # Wait for all to complete
+    print(f"\n  All 6 triplets running. Waiting for completion...\n")
+    t0 = time.time()
+
+    results_summary = {}
+    for tid, proc, log_file, log_path in procs:
+        proc.wait()
+        log_file.close()
+        rc = proc.returncode
+        status = "PASSED" if rc == 0 else "FAILED"
+        results_summary[tid] = {'returncode': rc, 'status': status, 'log': log_path}
+        print(f"  T{tid}: {status} (exit code {rc}) — log: {log_path}")
+
+    total_time = time.time() - t0
+
+    # Collect results files
+    print(f"\n  {'='*50}")
+    print(f"  PARALLEL EXECUTION COMPLETE")
+    print(f"  Total wall time: {total_time:.0f}s ({total_time/60:.1f} min)")
+    print(f"  {'='*50}")
+
+    all_passed = all(r['returncode'] == 0 for r in results_summary.values())
+
+    for tid in range(1, 7):
+        r = results_summary[tid]
+        marker = "✓" if r['returncode'] == 0 else "✗"
+        print(f"  {marker} T{tid}: {r['status']}")
+
+        # Print key results from log
+        try:
+            with open(r['log'], 'r') as f:
+                lines = f.readlines()
+                for line in lines:
+                    if 'PASS' in line or 'FAIL' in line:
+                        if any(k in line for k in ['B+B', 'G+B', 'R+B', 'G+G', 'R+G', 'R+R']):
+                            print(f"    {line.rstrip()}")
+        except Exception:
+            pass
+
+    print(f"\n  {'*'*50}")
+    if all_passed:
+        print(f"  *  ALL 6 TRIPLETS PASSED — 6-LANE ARCHITECTURE VALIDATED")
+    else:
+        failed = [f"T{tid}" for tid, r in results_summary.items() if r['returncode'] != 0]
+        print(f"  *  FAILED: {', '.join(failed)}")
+    print(f"  *  Wall time: {total_time:.0f}s ({total_time/60:.1f} min)")
+    print(f"  *  Output: {output_dir}")
+    print(f"  {'*'*50}")
+
+    return all_passed
+
+
 def main():
     parser = argparse.ArgumentParser(description='IOC 6-Lane Integration Test')
     parser.add_argument('--triplet', type=int, default=None,
@@ -725,16 +820,37 @@ def main():
     parser.add_argument('--output', type=str,
                         default='/home/jackwayne/Desktop/Optical_computing/Research/data/ioc_6lane_validation',
                         help='Output directory')
+    parser.add_argument('--parallel', action='store_true',
+                        help='Run all 6 triplets as parallel subprocesses (max core usage)')
+    parser.add_argument('--cores', type=int, default=None,
+                        help='Total CPU cores available (default: auto-detect)')
+    parser.add_argument('--python', type=str,
+                        default='/home/jackwayne/miniconda/envs/meep_env/bin/python',
+                        help='Path to Python binary with Meep installed')
 
-    # Only parse on rank 0, broadcast to others
+    # In parallel subprocess mode, only rank 0 matters
     if RANK == 0:
         args = parser.parse_args()
     else:
-        args = argparse.Namespace(triplet=None, output='')
+        args = argparse.Namespace(triplet=None, output='', parallel=False, cores=None, python='')
 
     if IS_PARALLEL:
         args = MPI.COMM_WORLD.bcast(args, root=0)
 
+    # Auto-detect cores
+    if args.cores is None:
+        try:
+            args.cores = len(os.sched_getaffinity(0))
+        except AttributeError:
+            import multiprocessing
+            args.cores = multiprocessing.cpu_count()
+
+    # Parallel mode — run 6 triplets concurrently as subprocesses
+    if args.parallel:
+        success = run_parallel_triplets(args.output, args.python, args.cores)
+        sys.exit(0 if success else 1)
+
+    # Sequential mode (single triplet or all)
     output_dir = args.output
     if RANK == 0:
         os.makedirs(output_dir, exist_ok=True)
