@@ -76,20 +76,46 @@ def print_master(msg):
 
 
 # ===========================================================================
-# MATERIAL MODEL (LiNbO3 — single-pole Lorentzian fit to Sellmeier)
+# MATERIAL MODEL (LiNbO3 — Sellmeier equation for accurate dispersion)
 # ===========================================================================
 
-LINBO3_EPS    = 1.472
-LINBO3_SIGMA  = 3.035
-LINBO3_FREQ0  = 4.5
-CHI2_VAL      = 0.5
+# Sellmeier coefficients for LiNbO3 ordinary ray (no)
+# From Jundt, "Temperature-dependent Sellmeier equation for the index of refraction, no, 
+# in congruent lithium niobate", Opt. Lett. 22, 1553-1555 (1997)
+# n²(λ) = a₁ + b₁/(λ² - c₁²) + b₂/(λ² - c₂²) with λ in micrometers
+SELLMEIER_A1 = 1.0       # Fixed term
+SELLMEIER_B1 = 2.6734    # First oscillator strength  
+SELLMEIER_B2 = 1.2290    # Second oscillator strength
+SELLMEIER_C1 = 0.1327    # First resonance wavelength (μm)
+SELLMEIER_C2 = 0.2431    # Second resonance wavelength (μm)
 
+CHI2_VAL = 0.5
 
 def compute_meep_index(wavelength_um: float) -> float:
-    """Refractive index from the Lorentzian material model."""
+    """Refractive index from Sellmeier equation for LiNbO3."""
+    wl2 = wavelength_um**2
+    c1_sq = SELLMEIER_C1**2
+    c2_sq = SELLMEIER_C2**2
+    # Sellmeier equation: n² = a₁ + b₁/(λ² - c₁²) + b₂/(λ² - c₂²)
+    n2 = SELLMEIER_A1 + SELLMEIER_B1/(wl2 - c1_sq) + SELLMEIER_B2/(wl2 - c2_sq)
+    return float(np.sqrt(n2))
+
+def compute_lorentzian_params(wavelength_um: float):
+    """Convert Sellmeier to single-pole Lorentzian for Meep at given wavelength."""
+    n_target = compute_meep_index(wavelength_um)
+    eps_target = n_target**2
+    
+    # Fit single Lorentzian: ε = ε∞ + σf₀²/(f₀² - f²)
+    # Choose f₀ = 4.5 (THz equivalent), solve for ε∞ and σ
     f = 1.0 / wavelength_um
-    eps = LINBO3_EPS + LINBO3_SIGMA * LINBO3_FREQ0**2 / (LINBO3_FREQ0**2 - f**2)
-    return float(np.sqrt(eps))
+    f0 = 4.5
+    
+    # At the target wavelength: eps_target = eps_inf + sigma*f0²/(f0² - f²)
+    # Choose eps_inf = 1.0, solve for sigma
+    eps_inf = 1.0
+    sigma = (eps_target - eps_inf) * (f0**2 - f**2) / f0**2
+    
+    return eps_inf, sigma, f0
 
 
 def compute_qpm_period(lambda_a_um: float, lambda_b_um: float) -> float:
@@ -207,11 +233,13 @@ def run_sfg_test(triplet_id, sfg_key, sfg_info):
         if dl < 0.01:
             break
         sign = 1 if (i % 2 == 0) else -1
+        # Dynamic Lorentzian fit at SFG wavelength for accurate dispersion
+        eps_inf, sigma, f0 = compute_lorentzian_params(lsfg)
         mat = mp.Medium(
-            epsilon=LINBO3_EPS,
+            epsilon=eps_inf,
             E_susceptibilities=[
-                mp.LorentzianSusceptibility(frequency=LINBO3_FREQ0, gamma=0.0,
-                                            sigma=LINBO3_SIGMA)
+                mp.LorentzianSusceptibility(frequency=f0, gamma=0.0,
+                                            sigma=sigma)
             ],
             chi2=CHI2_VAL * sign,
         )
@@ -223,11 +251,12 @@ def run_sfg_test(triplet_id, sfg_key, sfg_info):
     print_master(f"  PPLN: {n_dom} domains, period={ppln_period:.2f} um")
 
     # Output waveguide (linear LiNbO3, no poling)
+    eps_inf, sigma, f0 = compute_lorentzian_params(lsfg)
     linbo3_linear = mp.Medium(
-        epsilon=LINBO3_EPS,
+        epsilon=eps_inf,
         E_susceptibilities=[
-            mp.LorentzianSusceptibility(frequency=LINBO3_FREQ0, gamma=0.0,
-                                        sigma=LINBO3_SIGMA)
+            mp.LorentzianSusceptibility(frequency=f0, gamma=0.0,
+                                        sigma=sigma)
         ],
     )
     geometry.append(
