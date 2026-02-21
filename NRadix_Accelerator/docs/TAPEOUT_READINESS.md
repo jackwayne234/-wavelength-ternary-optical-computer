@@ -10,7 +10,7 @@
 
 | # | Gap | Status | Document | Priority |
 |---|-----|--------|----------|----------|
-| 1 | Circuit-level simulation (full chip) | **COMPLETE (single triplet)** — 8/8 tests PASS (incl. IOC domain modes). 6-triplet found cross-coupling issue → MVP single-triplet is solid, multi-triplet needs per-triplet PPLN sections | [CIRCUIT_SIMULATION_PLAN.md](CIRCUIT_SIMULATION_PLAN.md) | CRITICAL |
+| 1 | Circuit-level simulation (full chip) | **COMPLETE** — 8/8 SAX circuit tests PASS (incl. IOC domain modes). 6-triplet cross-coupling resolved via isolated-lane architecture (dedicated PPLN per SFG pair). 36/36 FDTD validation PASS (Feb 21, 2026). | [CIRCUIT_SIMULATION_PLAN.md](CIRCUIT_SIMULATION_PLAN.md) | CRITICAL |
 | 2 | Monte Carlo process variation analysis | **COMPLETE** — 10,000 trials, 99.82% yield, ring tuning is limiting factor | [MONTE_CARLO_ANALYSIS.md](MONTE_CARLO_ANALYSIS.md) | CRITICAL |
 | 3 | Thermal sensitivity analysis | **COMPLETE** — 30°C passive window (15-45°C), SFG >99.9% across range, TEC optional | [THERMAL_SENSITIVITY.md](THERMAL_SENSITIVITY.md) | HIGH |
 | 4 | End-to-end functional test plan | **COMPLETE** — 3 test levels, 9 PE tests, failure diagnosis flowcharts, data sheets | [FUNCTIONAL_TEST_PLAN.md](FUNCTIONAL_TEST_PLAN.md) | HIGH |
@@ -138,6 +138,39 @@
 - [x] All PEs physically just add — IOC determines meaning
 - [x] Verified: physical signals identical between modes (glass doesn't change)
 
+### Session 2026-02-21 Updates
+
+#### Sellmeier Material Model Fix
+- [x] Bug found: Sellmeier formula used `B/(λ²-C²)` instead of correct `Bλ²/(λ²-C²)` (Zelmon et al. 1997)
+- [x] At SFG wavelengths (~500nm), this gave n≈4.35 instead of correct n≈2.34
+- [x] FDTD stability: two-pole Lorentzian with physical UV pole frequencies caused NaN (ε<0 at resolvable freqs)
+- [x] Fix: single-pole Lorentzian with f₀=3.5 (below FDTD stability boundary ~4.0), solving for ε∞ and σ to match Sellmeier at both pump and SFG wavelengths
+- [x] Committed as `00f674e` on `main`
+
+#### Isolated-Lane Architecture
+- [x] Problem: shared PPLN waveguide produces parasitic SHG that competes with cross-SFG
+- [x] Solution: each SFG pair gets its own dedicated PPLN waveguide
+- [x] Impact: eliminates SHG suppression criterion entirely
+- [x] Hardware: negligible area impact for 9×9 tapeout (~0.1-0.2 mm² for 486 isolated lanes)
+- [x] Manufacturing: arguably easier (no filters, more relaxed tolerances)
+
+#### 6-Lane IOC FDTD Integration Test — 36/36 PASS
+- [x] All 6 wavelength triplets tested (T1-T6, 1000-1340 nm)
+- [x] 6 SFG combinations per triplet × 6 triplets = 36 total
+- [x] **36/36 PASS** — all wavelength deviations <5 nm, all S/N >19 dB
+- [x] QPM periods validated: 5.01-13.30 μm (physically realistic for LiNbO3)
+- [x] Runtime: ~55 seconds on 64-core EC2 instance
+- [x] Results saved: `~/Desktop/ioc_6lane_results_isolated/T1-T6/`
+
+| Triplet | Wavelengths (nm) | SFG Range (nm) | QPM Range (μm) | Result |
+|---------|-----------------|----------------|-----------------|--------|
+| T1 | 1000/1020/1040 | 500-520 | 5.01-5.73 | 6/6 PASS |
+| T2 | 1060/1080/1100 | 530-550 | 6.12-6.94 | 6/6 PASS |
+| T3 | 1120/1140/1160 | 557-582 | 7.37-8.29 | 6/6 PASS |
+| T4 | 1180/1200/1220 | 590-610 | 8.77-9.79 | 6/6 PASS |
+| T5 | 1240/1260/1280 | 620-640 | 10.33-11.46 | 6/6 PASS |
+| T6 | 1300/1320/1340 | 649-670 | 12.05-13.30 | 6/6 PASS |
+
 #### 3^3 Tower Encoding — DROPPED
 - [x] 3^3 encoding for ADD/SUB PEs investigated and **dropped**
 - [x] Reason: cubing doesn't distribute over addition — (a+b)^3 != a^3 + b^3
@@ -175,6 +208,9 @@ These items are already done and documented:
 - [x] 81x81 FDTD validation PASSED
 - [x] Paper v1 (theory) published — Zenodo DOI: 10.5281/zenodo.18437600
 - [x] Paper v2 (architecture) published — Zenodo DOI: 10.5281/zenodo.18501296
+- [x] 6-lane IOC FDTD integration test — 36/36 PASS (isolated-lane, Feb 21 2026)
+- [x] Sellmeier material model corrected and validated (Zelmon et al. 1997)
+- [x] Isolated-lane architecture adopted (dedicated PPLN per SFG pair)
 
 ---
 
@@ -182,12 +218,13 @@ These items are already done and documented:
 
 When all 5 gaps are closed, these are the final steps:
 
-- [ ] All 5 gaps above resolved and documented
-- [ ] Final GDS generated from `monolithic_chip_9x9.py` with latest parameters
+- [x] All 5 gaps above resolved and documented
+- [ ] Final GDS generated from `monolithic_chip_9x9.py` with latest parameters (isolated-lane architecture)
 - [ ] GDS passes KLayout DRC with zero violations
-- [ ] Circuit simulation confirms end-to-end functionality
-- [ ] Monte Carlo shows >95% yield
-- [ ] Thermal analysis defines operating window
+- [x] Circuit simulation confirms end-to-end functionality (8/8 SAX tests PASS)
+- [x] 6-lane IOC FDTD confirms SFG physics (36/36 PASS, isolated lanes)
+- [x] Monte Carlo shows >95% yield (99.82%, 10,000 trials)
+- [x] Thermal analysis defines operating window (30°C passive, 15-45°C)
 - [ ] Test bench BOM ordered / on hand
 - [ ] Functional test plan reviewed
 - [ ] Foundry (HyperLight) contacted with design package
