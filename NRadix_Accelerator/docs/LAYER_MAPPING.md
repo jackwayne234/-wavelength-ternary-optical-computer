@@ -377,7 +377,7 @@ if view:
 **Design Rules:**
 - Mixer length: 20 um minimum for efficient conversion
 - Mixer width: 800 nm (phase matching)
-- Poling period: 6.5-7.0 um (for 1.55 + 1.0 um -> 0.608 um)
+- Poling period: 5.0-13.3 um (6 triplets, 1000-1340 nm, corrected Sellmeier)
 
 **Process:**
 - Deposit electrode pattern (Cr/Au 200 nm)

@@ -91,21 +91,70 @@ N_LINBO3 = 2.2                # Refractive index
 C_SPEED_UM_PS = 299.792       # μm/ps — speed of light
 V_GROUP_UM_PS = C_SPEED_UM_PS / N_LINBO3  # ~136.3 μm/ps group velocity
 
+# =============================================================================
+# Sellmeier Dispersion Model (LiNbO3 ordinary ray)
+# =============================================================================
+# Zelmon, Small & Jundt, "Infrared corrected Sellmeier coefficients for
+# congruently grown lithium niobate", JOSA B 14, 3319-3322 (1997)
+# n²(λ) = A₁ + B₁λ²/(λ² − C₁²) + B₂λ²/(λ² − C₂²),  λ in micrometers
+#
+# Validated in ioc_6lane_integration_test.py (commit 00f674e, 36/36 PASS).
+
+SELLMEIER_A1 = 1.0       # Fixed term
+SELLMEIER_B1 = 2.6734    # First oscillator strength (UV pole)
+SELLMEIER_B2 = 1.2290    # Second oscillator strength (UV pole)
+SELLMEIER_C1 = 0.1327    # First resonance wavelength (μm)
+SELLMEIER_C2 = 0.2431    # Second resonance wavelength (μm)
+
+
+def compute_sellmeier_index(wavelength_um: float) -> float:
+    """Refractive index from Sellmeier equation for LiNbO3."""
+    wl2 = wavelength_um**2
+    c1_sq = SELLMEIER_C1**2
+    c2_sq = SELLMEIER_C2**2
+    n2 = SELLMEIER_A1 + SELLMEIER_B1*wl2/(wl2 - c1_sq) + SELLMEIER_B2*wl2/(wl2 - c2_sq)
+    return float(np.sqrt(n2))
+
+
+def compute_qpm_period(lambda_a_um: float, lambda_b_um: float) -> float:
+    """PPLN quasi-phase-matching period for SFG: λ_a + λ_b → λ_sfg."""
+    lambda_sfg = 1.0 / (1.0 / lambda_a_um + 1.0 / lambda_b_um)
+    n_a = compute_sellmeier_index(lambda_a_um)
+    n_b = compute_sellmeier_index(lambda_b_um)
+    n_sfg = compute_sellmeier_index(lambda_sfg)
+    delta_k = 2.0 * np.pi * (n_sfg / lambda_sfg - n_a / lambda_a_um - n_b / lambda_b_um)
+    if abs(delta_k) < 1e-10:
+        return float('inf')
+    return abs(2.0 * np.pi / delta_k)
+
+
+# =============================================================================
+# Triplet Wavelengths & Computed QPM Periods
+# =============================================================================
+# R/G/B wavelengths (nm) for each of the 6 WDM triplets.
+TRIPLET_WAVELENGTHS = {
+    1: {'R': 1040, 'G': 1020, 'B': 1000},
+    2: {'R': 1100, 'G': 1080, 'B': 1060},
+    3: {'R': 1160, 'G': 1140, 'B': 1120},
+    4: {'R': 1220, 'G': 1200, 'B': 1180},
+    5: {'R': 1280, 'G': 1260, 'B': 1240},
+    6: {'R': 1340, 'G': 1320, 'B': 1300},
+}
+
 # PE dimensions (expanded for 6-lane parallel PPLN mixer)
 PE_WIDTH = 55.0               # μm (was 50, expanded for 6-lane mixer)
 PE_HEIGHT = 55.0              # μm (was 50, expanded for 6-lane mixer)
 PE_SPACING = 5.0              # μm between PEs
 PE_PITCH = PE_WIDTH + PE_SPACING  # 60 μm center-to-center
 
-# 6-lane PPLN mixer QPM periods (μm) — B+B case for each triplet
-TRIPLET_QPM_PERIODS = {
-    1: 3.78,   # T1: 1000/1020/1040 nm
-    2: 4.62,   # T2: 1060/1080/1100 nm
-    3: 5.57,   # T3: 1120/1140/1160 nm
-    4: 6.63,   # T4: 1180/1200/1220 nm
-    5: 7.82,   # T5: 1240/1260/1280 nm
-    6: 9.13,   # T6: 1300/1320/1340 nm
-}
+# 6-lane PPLN mixer QPM periods (μm) — G+G center pair, corrected Sellmeier
+# Computed from Zelmon et al. 1997 Sellmeier (validated 36/36 FDTD PASS).
+# Expected values for regression:
+#   T1 ≈ 5.36, T2 ≈ 6.52, T3 ≈ 7.82, T4 ≈ 9.27, T5 ≈ 10.89, T6 ≈ 12.67
+TRIPLET_QPM_PERIODS = {}
+for _t, _wl in TRIPLET_WAVELENGTHS.items():
+    _g_um = _wl['G'] / 1000.0
+    TRIPLET_QPM_PERIODS[_t] = compute_qpm_period(_g_um, _g_um)
 N_LANES = 6  # Number of parallel WDM lanes
 
 # Array
@@ -137,6 +186,9 @@ CLOCK_FREQ_MHZ = 617
 CHIP_WIDTH = (MARGIN_X + IOC_INPUT_WIDTH + ROUTING_GAP +
               ARRAY_WIDTH + ROUTING_GAP + IOC_OUTPUT_WIDTH + MARGIN_X)
 CHIP_HEIGHT = (MARGIN_Y + ARRAY_HEIGHT + WEIGHT_BUS_HEIGHT + MARGIN_Y_TOP)
+# Accelerator core: ~1115 × 735 μm.
+# Foundry die slot: 3.6 × 5.4 mm (includes test structures, alignment marks,
+# edge exclusion zones — see MPW_RETICLE_PLAN.md).
 
 # Region positions (X origins)
 IOC_INPUT_X = MARGIN_X
@@ -210,6 +262,8 @@ def monolithic_pe(row: int = 0, col: int = 0) -> Component:
         ], layer=LAYER_CHI2_SFG)
 
         # PPLN poling stripes per lane (QPM period varies by triplet)
+        # Corrected Sellmeier periods (5.4–12.7 μm) give 1–3 stripes
+        # per 20 μm mixer length (FDTD validated). max(...,1) guard handles it.
         qpm = TRIPLET_QPM_PERIODS[lane + 1]
         stripe_period = qpm  # Full period
         stripe_w = qpm / 2.0  # Half-period domain

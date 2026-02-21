@@ -23,7 +23,7 @@ PARAMETER SOURCES:
     - Waveguide width tolerance: DRC_RULES.md rule WG.W.1 (500nm +/- 20nm)
     - Coupling gap tolerance: DRC_RULES.md rule RING.G.1 (150nm +/- 20nm)
     - Etch depth tolerance: DRC_RULES.md Section 10.1 (400nm +/- 10nm)
-    - PPLN poling period: DRC_RULES.md rule PPLN.P.1 (6.75um +/- 0.1um)
+    - PPLN poling period: DRC_RULES.md rule PPLN.P.1 (9.27um T4 G+G mid-range +/- 0.1um)
     - Propagation loss: DRC_RULES.md Section 10.1 (<3 dB/cm target)
     - Refractive index: Material property variation for X-cut LiNbO3
 
@@ -71,7 +71,8 @@ class NominalDesign:
     etch_depth_nm: float = 400.0            # nm — RIE etch into TFLN slab
 
     # --- PPLN poling ---
-    ppln_poling_period_um: float = 6.75     # um — quasi-phase-matching for SFG
+    ppln_poling_period_um: float = 9.27     # um — T4 G+G mid-range, corrected Sellmeier
+    # TODO: per-triplet Monte Carlo (periods span 5.4–12.7 um across 6 triplets)
 
     # --- Material properties ---
     refractive_index: float = 2.2           # X-cut LiNbO3 extraordinary index
@@ -154,11 +155,12 @@ class ProcessVariation:
         waveguide width because it's a gap (defined by two edges).
 
     PPLN poling period (sigma = 0.033um, so 3*sigma = 0.1um):
-        DRC_RULES.md Section 10.1: poling period tolerance +/- 50nm.
-        We use a slightly more conservative 3*sigma = 100nm. Poling uniformity
-        depends on the voltage pulse shape and LiNbO3 crystal quality.
-        Period errors shift the phase-matching bandwidth, which can change
-        which SFG products are efficiently generated.
+        Representative T4 G+G mid-range period (9.27 um, corrected Sellmeier).
+        Actual periods span 5.4-12.7 um across 6 triplets. DRC_RULES.md
+        Section 10.1: poling period tolerance +/- 50nm. We use a slightly
+        more conservative 3*sigma = 100nm. Poling uniformity depends on
+        the voltage pulse shape and LiNbO3 crystal quality. Period errors
+        shift the phase-matching bandwidth.
 
     Etch depth (sigma = 3.33nm, so 3*sigma = 10nm):
         DRC_RULES.md Section 10.1: 400nm +/- 10nm. RIE etch depth is
@@ -205,7 +207,7 @@ class SampledChip:
     """
     waveguide_width_nm: float = 500.0
     ring_coupling_gap_nm: float = 150.0
-    ppln_poling_period_um: float = 6.75
+    ppln_poling_period_um: float = 9.27
     etch_depth_nm: float = 400.0
     prop_loss_db_per_cm: float = 2.0
     refractive_index: float = 2.2

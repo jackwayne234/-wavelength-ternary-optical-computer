@@ -121,7 +121,7 @@ Our SFG outputs are in the visible range (532-775 nm), but telecom TFLN foundrie
 
 ### Gap 2 (Important): PPLN Poling Period Confirmation
 
-Our design requires 6.5-7.0 um poling period for non-telecom SFG wavelengths (1550+1064 -> 631 nm). Standard PPLN foundry offerings target telecom bands with different periods.
+Our design requires 5.0-13.3 um poling periods for 6 WDM triplets (1000-1340 nm, corrected Sellmeier). Standard PPLN foundry offerings target telecom bands with different periods.
 
 **Action:** Must confirm with foundry that custom poling periods in our range are achievable.
 
@@ -175,8 +175,8 @@ Key design parameters:
 - Chip size: ~1.1 x 0.7 mm
 - Material: X-cut TFLN
 - Waveguide width: 500 nm (single-mode)
-- Critical feature: PPLN periodic poling (6.5-7.0 um period) for
-  sum-frequency generation at non-telecom wavelengths
+- Critical feature: PPLN periodic poling (5.0-13.3 um periods) for
+  sum-frequency generation across 6 WDM triplets (1000-1340 nm)
 - Operating wavelengths: 1550/1310/1064 nm inputs, 532-775 nm SFG outputs
 - Components: 81 SFG mixers, MZI modulators, AWG demux, ring resonators
 - Design tool: GDSFactory (compatible with your PDK platform)
@@ -185,7 +185,7 @@ Design validated: circuit simulation 8/8 PASS, Monte Carlo 99.82% yield
 (10,000 trials), thermal analysis 15-45C passive window.
 
 Questions:
-1. Can you accommodate custom PPLN poling periods of 6.5-7.0 um?
+1. Can you accommodate custom PPLN poling periods of 5.0-13.3 um?
 2. What detection options exist for visible-range (532-775 nm) outputs?
 3. What is your current MPW schedule and pricing?
 4. Can I access your GDSFactory PDK for design rule verification?

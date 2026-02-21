@@ -52,7 +52,7 @@ For each virtual chip, 5 validation checks (derived from `monolithic_chip_9x9.py
 |-----------|---------|---------|---------|------|--------|
 | Waveguide width | 500 | 6.67 | 20.0 | nm | DRC WG.W.1 |
 | Ring coupling gap | 150 | 5.0 | 15.0 | nm | DRC RING.G.1 |
-| PPLN poling period | 6.750 | 0.033 | 0.100 | um | DRC Section 10.1 |
+| PPLN poling period | 9.27 | 0.033 | 0.100 | um | T4 G+G, corrected Sellmeier |
 | Etch depth | 400 | 3.33 | 10.0 | nm | DRC Section 10.1 |
 | Propagation loss | 2.0 | 0.167 | 0.50 | dB/cm | DRC Section 10.1 |
 | Refractive index | 2.200 | 0.00167 | 0.005 | - | Material spec |
@@ -73,7 +73,7 @@ For each virtual chip, 5 validation checks (derived from `monolithic_chip_9x9.py
 
 **Ring coupling gap (150 nm +/- 15 nm):** The gap between ring resonator and bus waveguide controls the Q-factor and extinction ratio. Since it's defined by two separate edges, the gap tolerance compounds. The DRC specifies 130-170 nm range.
 
-**PPLN poling period (6.75 um +/- 0.1 um):** Controls quasi-phase-matching for SFG. The DRC lists +/- 50 nm tolerance, but we use a more conservative 100 nm at 3-sigma to account for poling electrode misalignment and crystal domain irregularity.
+**PPLN poling period (9.27 um +/- 0.1 um):** Representative mid-range value (T4 G+G, corrected Sellmeier). Actual periods span 5.4–12.7 um across 6 triplets. Controls quasi-phase-matching for SFG. The DRC lists +/- 50 nm tolerance, but we use a more conservative 100 nm at 3-sigma to account for poling electrode misalignment and crystal domain irregularity.
 
 **Etch depth (400 nm +/- 10 nm):** RIE etch uniformity across a wafer is typically 2-5%. A 10 nm variation on 400 nm depth (2.5%) is achievable with modern processes.
 

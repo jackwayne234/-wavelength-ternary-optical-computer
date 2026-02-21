@@ -17,7 +17,7 @@ def compute_sellmeier_index(wavelength_um):
     wl2 = wavelength_um**2
     c1_sq = SELLMEIER_C1**2
     c2_sq = SELLMEIER_C2**2
-    n2 = SELLMEIER_A1 + SELLMEIER_B1/(wl2 - c1_sq) + SELLMEIER_B2/(wl2 - c2_sq)
+    n2 = SELLMEIER_A1 + SELLMEIER_B1*wl2/(wl2 - c1_sq) + SELLMEIER_B2*wl2/(wl2 - c2_sq)
     return float(np.sqrt(n2))
 
 def compute_old_lorentzian_index(wavelength_um):

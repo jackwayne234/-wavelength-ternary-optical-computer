@@ -66,7 +66,7 @@
 
 | Rule ID | Parameter | Min | Max | Unit | Notes |
 |---------|-----------|-----|-----|------|-------|
-| PPLN.P.1 | SFG poling period | 6.5 | 7.0 | um | For 1.55/1.0 um SFG |
+| PPLN.P.1 | SFG poling period | 5.0 | 13.5 | um | 6 triplets (1000-1340nm), Zelmon Sellmeier |
 | PPLN.P.2 | DFG poling period | 10.0 | 12.0 | um | For difference freq |
 | PPLN.W.1 | Poling electrode width | 2.0 | - | um | - |
 | PPLN.S.1 | Poling electrode spacing | 1.0 | - | um | - |

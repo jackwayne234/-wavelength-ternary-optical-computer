@@ -31,7 +31,7 @@
 | **Process** | Liftoff + high-voltage poling |
 | **Electrode** | 200nm Cr/Au |
 | **Poling Voltage** | 21 kV/mm |
-| **Period** | 6.5-7.0 um (SFG), 10-12 um (DFG) |
+| **Period** | 5.0-13.3 um (SFG, 6 triplets), 10-12 um (DFG) |
 | **QC Check** | SHG efficiency test |
 
 ### Step 3: Heater Metal Deposition
