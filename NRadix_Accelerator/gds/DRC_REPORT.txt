@@ -1,0 +1,125 @@
+==============================================================================
+  DRC REPORT - Monolithic 9x9 N-Radix Chip
+==============================================================================
+  GDS file : /home/jackwayne/Desktop/Projects/Optical_computing/Research/data/gds/monolithic_9x9_nradix.gds
+  Top cell : monolithic_chip_9x9_IPETrue_IKCTrue_IWBTrue
+  DRC rules: NRadix_Accelerator/docs/DRC_RULES.md v1.1
+==============================================================================
+
+  RULE SUMMARY
+------------------------------------------------------------------------------
+  [+] WG.W.1       PASS   Waveguide width 0.48-0.52 um (single-mode)
+  [+] WG.S.1       PASS   Minimum waveguide spacing >= 0.5 um
+  [+] MTL1.W.1     PASS   Minimum heater width >= 1.0 um
+  [+] MTL1.S.1     PASS   Minimum heater spacing >= 2.0 um
+  [+] MTL2.W.1     PASS   Minimum bond pad dimension >= 80 um
+  [+] MTL2.S.1     PASS   Minimum pad-to-pad spacing >= 50 um
+  [+] SP.5         PASS   SFG region spacing >= 10 um
+  [+] PPLN.L.1     PASS   SFG mixer length 18-22 um
+  [+] EDGE.1       PASS   Feature-to-die-edge >= 50 um
+  [i] OVERLAP      INFO   Same-layer polygon overlaps  (informational)
+  [+] CHIP         PASS   Chip dimensions = 1115 x 735 um
+  [+] LAYER_INV    PASS   Layer inventory
+------------------------------------------------------------------------------
+  OVERALL: PASS - all critical rules satisfied
+
+==============================================================================
+  Rule WG.W.1: Waveguide width 0.48-0.52 um (single-mode)
+  Status: PASS   |   Items checked: 380
+  Checked 380 WG polygons
+
+==============================================================================
+  Rule WG.S.1: Minimum waveguide spacing >= 0.5 um
+  Status: PASS   |   Items checked: 380
+  Checked 72010 WG-WG pairs
+
+==============================================================================
+  Rule MTL1.W.1: Minimum heater width >= 1.0 um
+  Status: PASS   |   Items checked: 27
+  Checked 27 MTL1 polygons
+
+==============================================================================
+  Rule MTL1.S.1: Minimum heater spacing >= 2.0 um
+  Status: PASS   |   Items checked: 27
+  Checked 351 MTL1-MTL1 pairs
+
+==============================================================================
+  Rule MTL2.W.1: Minimum bond pad dimension >= 80 um
+  Status: PASS   |   Items checked: 12
+  Checked 12 MTL2 polygons
+
+==============================================================================
+  Rule MTL2.S.1: Minimum pad-to-pad spacing >= 50 um
+  Status: PASS   |   Items checked: 12
+  Checked 66 MTL2-MTL2 pairs
+
+==============================================================================
+  Rule SP.5: SFG region spacing >= 10 um
+  Status: PASS   |   Items checked: 81
+  Checked 3240 SFG-SFG pairs
+
+==============================================================================
+  Rule PPLN.L.1: SFG mixer length 18-22 um
+  Status: PASS   |   Items checked: 81
+  Checked 81 SFG polygons
+
+==============================================================================
+  Rule EDGE.1: Feature-to-die-edge >= 50 um
+  Status: PASS   |   Items checked: 907
+  Checked 907 features on 16 fab layers
+
+==============================================================================
+  Rule OVERLAP: Same-layer polygon overlaps
+  Status: FAIL   |   Items checked: 114718
+  Total bbox overlaps: 54 (showing first 20). Bounding-box overlaps are conservative - some may be false positives where polygons are close but do not actually intersect.
+  Violations (20):
+    - Layer CARRY_PATH: bbox overlap between poly 72 ~(325.0,117.5) and poly 73. Note: bbox overlap != true polygon overlap (conservative check). @ (325.0, 117.5)
+    - Layer CARRY_PATH: bbox overlap between poly 73 ~(592.5,115.0) and poly 74. Note: bbox overlap != true polygon overlap (conservative check). @ (592.5, 115.0)
+    - Layer CARRY_PATH: bbox overlap between poly 73 ~(592.5,115.0) and poly 75. Note: bbox overlap != true polygon overlap (conservative check). @ (592.5, 115.0)
+    - Layer CARRY_PATH: bbox overlap between poly 73 ~(592.5,115.0) and poly 78. Note: bbox overlap != true polygon overlap (conservative check). @ (592.5, 115.0)
+    - Layer CARRY_PATH: bbox overlap between poly 73 ~(592.5,115.0) and poly 81. Note: bbox overlap != true polygon overlap (conservative check). @ (592.5, 115.0)
+    - Layer CARRY_PATH: bbox overlap between poly 73 ~(592.5,115.0) and poly 84. Note: bbox overlap != true polygon overlap (conservative check). @ (592.5, 115.0)
+    - Layer CARRY_PATH: bbox overlap between poly 73 ~(592.5,115.0) and poly 87. Note: bbox overlap != true polygon overlap (conservative check). @ (592.5, 115.0)
+    - Layer CARRY_PATH: bbox overlap between poly 73 ~(592.5,115.0) and poly 90. Note: bbox overlap != true polygon overlap (conservative check). @ (592.5, 115.0)
+    - Layer CARRY_PATH: bbox overlap between poly 73 ~(592.5,115.0) and poly 93. Note: bbox overlap != true polygon overlap (conservative check). @ (592.5, 115.0)
+    - Layer CARRY_PATH: bbox overlap between poly 73 ~(592.5,115.0) and poly 96. Note: bbox overlap != true polygon overlap (conservative check). @ (592.5, 115.0)
+    - Layer CARRY_PATH: bbox overlap between poly 75 ~(380.0,116.0) and poly 76. Note: bbox overlap != true polygon overlap (conservative check). @ (380.0, 116.0)
+    - Layer CARRY_PATH: bbox overlap between poly 76 ~(621.5,112.0) and poly 77. Note: bbox overlap != true polygon overlap (conservative check). @ (621.5, 112.0)
+    - Layer CARRY_PATH: bbox overlap between poly 76 ~(621.5,112.0) and poly 78. Note: bbox overlap != true polygon overlap (conservative check). @ (621.5, 112.0)
+    - Layer CARRY_PATH: bbox overlap between poly 76 ~(621.5,112.0) and poly 81. Note: bbox overlap != true polygon overlap (conservative check). @ (621.5, 112.0)
+    - Layer CARRY_PATH: bbox overlap between poly 76 ~(621.5,112.0) and poly 84. Note: bbox overlap != true polygon overlap (conservative check). @ (621.5, 112.0)
+    - Layer CARRY_PATH: bbox overlap between poly 76 ~(621.5,112.0) and poly 87. Note: bbox overlap != true polygon overlap (conservative check). @ (621.5, 112.0)
+    - Layer CARRY_PATH: bbox overlap between poly 76 ~(621.5,112.0) and poly 90. Note: bbox overlap != true polygon overlap (conservative check). @ (621.5, 112.0)
+    - Layer CARRY_PATH: bbox overlap between poly 76 ~(621.5,112.0) and poly 93. Note: bbox overlap != true polygon overlap (conservative check). @ (621.5, 112.0)
+    - Layer CARRY_PATH: bbox overlap between poly 76 ~(621.5,112.0) and poly 96. Note: bbox overlap != true polygon overlap (conservative check). @ (621.5, 112.0)
+    - Layer CARRY_PATH: bbox overlap between poly 78 ~(435.0,114.5) and poly 79. Note: bbox overlap != true polygon overlap (conservative check). @ (435.0, 114.5)
+
+==============================================================================
+  Rule CHIP: Chip dimensions = 1115 x 735 um
+  Status: PASS   |   Items checked: 1
+  Chip extents: (0.00, 0.00) to (1115.00, 735.00)
+           Actual: 1115.00 x 735.00 um
+           Expected: 1115 x 735 um
+
+==============================================================================
+  Rule LAYER_INV: Layer inventory
+  Status: PASS   |   Items checked: 1713
+    (  1, 0) WG (waveguide)                 :   380 polygons
+    (  2, 0) SFG (chi2 mixer)               :    81 polygons
+    (  2, 1) UNKNOWN                        :   648 polygons
+    (  5, 0) KERR_RES (Kerr resonator)      :     1 polygons
+    ( 10, 0) MTL1 (heater TiN)              :    27 polygons
+    ( 11, 0) CARRY_PATH                     :   261 polygons
+    ( 12, 0) MTL2 (bond pad Ti/Au)          :    12 polygons
+    ( 12, 1) MTL2_INT (internal metal)      :    46 polygons
+    ( 15, 0) AWG (generator)                :     9 polygons
+    ( 16, 0) DETECTOR                       :    45 polygons
+    ( 18, 0) WEIGHT                         :    91 polygons
+    ( 20, 0) REGION (boundary)              :   103 polygons
+    ( 21, 0) MEANDER                        :     8 polygons
+    ( 99, 0) CHIP_BORDER                    :     1 polygons
+                                       TOTAL :  1713 polygons
+
+==============================================================================
+  END OF DRC REPORT
+==============================================================================

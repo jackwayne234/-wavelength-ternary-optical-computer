@@ -8,10 +8,12 @@ An optical AI accelerator achieving ~59× the performance of NVIDIA's B200 for m
 
 ### Design Principles
 
-1. **Simplified PEs**: Each processing element contains only:
-   - SFG mixer (sum-frequency generation for multiply)
+1. **6-Lane Parallel PEs**: Each processing element contains:
+   - WDM demux (AWG, splits 6 triplets into dedicated lanes)
+   - 6 PPLN SFG mixers (each QPM-tuned to its wavelength triplet)
+   - WDM mux (AWG, recombines outputs)
    - Waveguide routing (input/output paths)
-   - That's it. No local memory, no complex control logic.
+   - That's it. No local memory, no complex control logic. Fully passive.
 
 2. **Unified Optical Memory**: The CPU's 3-tier optical RAM serves dual purpose:
    - Standard CPU operations (when running CPU workloads)
@@ -23,7 +25,7 @@ An optical AI accelerator achieving ~59× the performance of NVIDIA's B200 for m
 
 | Aspect | Traditional (per-PE storage) | Streamed Design |
 |--------|------------------------------|-----------------|
-| PE Complexity | Memory + compute + control | SFG mixer + routing only |
+| PE Complexity | Memory + compute + control | 6 SFG mixers + demux/mux + routing |
 | Fabrication Yield | Lower (more components) | Higher (simpler PEs) |
 | Power | Per-PE memory leakage | Centralized, amortized |
 | Flexibility | Fixed weight capacity | Limited only by optical RAM |
@@ -89,10 +91,13 @@ NRadix_Accelerator/
 ## Quick Start
 
 ```bash
-# Run WDM validation
+# Run WDM validation (27×27)
 cd simulations/
 export OMP_NUM_THREADS=12
 /home/jackwayne/miniconda/envs/meep_env/bin/python wdm_27x27_array_test.py
+
+# Run WDM validation (81×81 - full chip)
+/home/jackwayne/miniconda/envs/meep_env/bin/python wdm_81x81_array_test.py
 
 # Use the Python driver/simulator
 cd driver/python/
@@ -105,8 +110,11 @@ python -c "from nradix import NRadixSimulator; sim = NRadixSimulator(27)"
 |--------|-------|
 | Array Sizes | 27×27 (729 PEs), 81×81 (6,561 PEs) |
 | Clock | 617 MHz (Kerr self-pulsing) |
-| WDM Channels | 6 triplets (18 wavelengths) |
-| Performance | ~59× B200 (matrix multiply) |
+| WDM Channels | 6 triplets (18 wavelengths), 6 parallel lanes per PE |
+| PE Architecture | WDM demux → 6 dedicated PPLN mixers → WDM mux |
+| PE Size | ~55 × 55 μm (monolithic, fully passive) |
+| Performance (single lane) | ~59× B200 (matrix multiply) |
+| Performance (6 lanes) | ~354× B200 (matrix multiply) |
 
 ## Documentation
 
@@ -120,7 +128,7 @@ python -c "from nradix import NRadixSimulator; sim = NRadixSimulator(27)"
 - [x] 3×3 WDM array - PASSED
 - [x] 9×9 WDM array - PASSED
 - [x] 27×27 WDM array - PASSED
-- [ ] 81×81 WDM array - Queued
+- [x] 81×81 WDM array - PASSED
 
 ## Simulation Validation
 
@@ -131,8 +139,9 @@ This architecture isn't just theory - it's been validated through FDTD simulatio
 | Array Size | Max Skew | Tolerance | Result |
 |------------|----------|-----------|--------|
 | 27×27 | 2.4% (39 fs) | <5% | **PASS** |
+| 81×81 | 3.2% (52 fs) | <5% | **PASS** |
 
-The H-tree clock distribution network delivers the 617 MHz Kerr clock to all PEs with minimal skew. At 27×27 scale, the maximum timing variation is 39 femtoseconds - well within the 5% tolerance required for synchronous operation.
+The H-tree clock distribution network delivers the 617 MHz Kerr clock to all PEs with minimal skew. At 81×81 scale (6,561 PEs), the maximum timing variation is 52 femtoseconds - well within the 5% tolerance required for synchronous operation.
 
 ### WDM Channel Isolation
 
@@ -141,21 +150,25 @@ The H-tree clock distribution network delivers the 617 MHz Kerr clock to all PEs
 | 3×3 | <-30 dB | -30 dB | **PASS** |
 | 9×9 | <-30 dB | -30 dB | **PASS** |
 | 27×27 | <-30 dB | -30 dB | **PASS** |
+| 81×81 | <-30 dB | -30 dB | **PASS** |
 
 All array sizes maintain better than -30 dB isolation between WDM channels, preventing signal interference during parallel computation.
 
-### Collision-Free Wavelength Triplet
+### Collision-Free Wavelength Triplets
 
-The ternary encoding uses three wavelengths with sufficient spacing to avoid SFG mixer collisions:
+Six wavelength triplets, each with 20nm internal spacing and 60nm inter-triplet spacing. Each triplet has a dedicated PPLN mixer with QPM tuned to its wavelengths:
 
-| Trit Value | Wavelength | Spacing to Next |
-|------------|------------|-----------------|
-| -1 | 1550 nm | 240 nm |
-| 0 | 1310 nm | 246 nm |
-| +1 | 1064 nm | - |
+| Triplet | λ₋₁ (nm) | λ₀ (nm) | λ₊₁ (nm) | SFG Output Band (nm) |
+|---------|-----------|---------|-----------|----------------------|
+| T1 | 1040 | 1020 | 1000 | 500–520 |
+| T2 | 1100 | 1080 | 1060 | 530–550 |
+| T3 | 1160 | 1140 | 1120 | 560–580 |
+| T4 | 1220 | 1200 | 1180 | 590–610 |
+| T5 | 1280 | 1260 | 1240 | 620–640 |
+| T6 | 1340 | 1320 | 1300 | 650–670 |
 
-All wavelengths maintain >10 nm spacing (actual: >240 nm), ensuring no frequency collisions during sum-frequency generation operations.
+All 18 wavelengths propagate through shared waveguides without crosstalk (validated via FDTD). Each PE's WDM demux splits triplets into dedicated PPLN mixers for computation, then recombines via WDM mux. No cross-triplet SFG collisions possible since each mixer only sees its own triplet.
 
 ### Key Insight
 
-**The physics scales.** Optical path lengths are predictable by Maxwell's equations - if the geometry is correct, the timing is correct. Unlike electronic circuits where parasitics create surprises at scale, photonic waveguides behave exactly as simulated. What works at 3×3 works at 27×27, and there's no physical reason it won't work at 81×81 and beyond.
+**The physics scales.** Optical path lengths are predictable by Maxwell's equations - if the geometry is correct, the timing is correct. Unlike electronic circuits where parasitics create surprises at scale, photonic waveguides behave exactly as simulated. What works at 3×3 works at 27×27 - and now validated at 81×81 (6,561 PEs), confirming that the architecture scales as predicted.

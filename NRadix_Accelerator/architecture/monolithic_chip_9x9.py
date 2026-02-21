@@ -61,12 +61,14 @@ gf.gpdk.PDK.activate()
 
 LAYER_WAVEGUIDE: LayerSpec = (1, 0)      # LiNbO3 waveguides
 LAYER_CHI2_SFG: LayerSpec = (2, 0)       # SFG mixer regions (PPLN)
+LAYER_PPLN_STRIPES: LayerSpec = (2, 1)   # PPLN poling electrode stripes (within mixer)
 LAYER_PHOTODET: LayerSpec = (3, 0)       # Photodetector regions
 LAYER_CHI2_DFG: LayerSpec = (4, 0)       # DFG mixer regions
 LAYER_KERR_CLK: LayerSpec = (5, 0)       # Kerr clock resonator
 LAYER_HEATER: LayerSpec = (10, 0)        # TiN heaters / RF electrodes
 LAYER_CARRY: LayerSpec = (11, 0)         # Vertical data flow
-LAYER_METAL_PAD: LayerSpec = (12, 0)     # Bond pads (Ti/Au)
+LAYER_METAL_PAD: LayerSpec = (12, 0)     # Bond pads (Ti/Au) — wire-bond only
+LAYER_METAL_INT: LayerSpec = (12, 1)     # Internal metal (control pads, RF electrodes)
 LAYER_LOG: LayerSpec = (13, 0)           # Saturable absorber (Er/Yb)
 LAYER_GAIN: LayerSpec = (14, 0)          # Gain medium (Er/Yb)
 LAYER_AWG: LayerSpec = (15, 0)           # AWG demux regions
@@ -89,11 +91,22 @@ N_LINBO3 = 2.2                # Refractive index
 C_SPEED_UM_PS = 299.792       # μm/ps — speed of light
 V_GROUP_UM_PS = C_SPEED_UM_PS / N_LINBO3  # ~136.3 μm/ps group velocity
 
-# PE dimensions
-PE_WIDTH = 50.0               # μm
-PE_HEIGHT = 50.0              # μm
+# PE dimensions (expanded for 6-lane parallel PPLN mixer)
+PE_WIDTH = 55.0               # μm (was 50, expanded for 6-lane mixer)
+PE_HEIGHT = 55.0              # μm (was 50, expanded for 6-lane mixer)
 PE_SPACING = 5.0              # μm between PEs
-PE_PITCH = PE_WIDTH + PE_SPACING  # 55 μm center-to-center
+PE_PITCH = PE_WIDTH + PE_SPACING  # 60 μm center-to-center
+
+# 6-lane PPLN mixer QPM periods (μm) — B+B case for each triplet
+TRIPLET_QPM_PERIODS = {
+    1: 3.78,   # T1: 1000/1020/1040 nm
+    2: 4.62,   # T2: 1060/1080/1100 nm
+    3: 5.57,   # T3: 1120/1140/1160 nm
+    4: 6.63,   # T4: 1180/1200/1220 nm
+    5: 7.82,   # T5: 1240/1260/1280 nm
+    6: 9.13,   # T6: 1300/1320/1340 nm
+}
+N_LANES = 6  # Number of parallel WDM lanes
 
 # Array
 N_ROWS = 9
@@ -105,9 +118,10 @@ ARRAY_HEIGHT = N_ROWS * PE_PITCH  # 495 μm
 IOC_INPUT_WIDTH = 180.0       # μm — left edge (encoders)
 IOC_OUTPUT_WIDTH = 200.0      # μm — right edge (decoders)
 
-# Chip margins
-MARGIN_X = 50.0               # μm from region to chip edge
-MARGIN_Y = 80.0               # μm top/bottom margins
+# Chip margins (must satisfy EDGE.1: features >= 50 um from die edge)
+MARGIN_X = 60.0               # μm from region to chip edge
+MARGIN_Y = 120.0              # μm bottom margin (room for Kerr clock + routing)
+MARGIN_Y_TOP = 80.0           # μm top margin (above weight bus)
 WEIGHT_BUS_HEIGHT = 40.0      # μm — weight streaming bus
 
 # Routing gaps between regions
@@ -122,7 +136,7 @@ CLOCK_FREQ_MHZ = 617
 
 CHIP_WIDTH = (MARGIN_X + IOC_INPUT_WIDTH + ROUTING_GAP +
               ARRAY_WIDTH + ROUTING_GAP + IOC_OUTPUT_WIDTH + MARGIN_X)
-CHIP_HEIGHT = (MARGIN_Y + WEIGHT_BUS_HEIGHT + ARRAY_HEIGHT + MARGIN_Y)
+CHIP_HEIGHT = (MARGIN_Y + ARRAY_HEIGHT + WEIGHT_BUS_HEIGHT + MARGIN_Y_TOP)
 
 # Region positions (X origins)
 IOC_INPUT_X = MARGIN_X
@@ -151,11 +165,14 @@ def monolithic_pe(row: int = 0, col: int = 0) -> Component:
     Simplified streaming PE for monolithic chip.
 
     Passive components only:
-    - SFG mixer (PPLN region)
+    - WDM demux (AWG, splits 6 triplets into dedicated lanes)
+    - 6 PPLN SFG mixers (each QPM-tuned to its triplet)
+    - WDM mux (AWG, recombines 6 SFG output bands)
     - Waveguide routing (input/output/weight)
     - Accumulator loop
 
     No clock input needed — timing via path-length matching.
+    Chip is fully passive — all 6 mixers are fixed photonic geometry.
     """
     c = gf.Component(f"M_PE_{row}_{col}_{_uid()}")
 
@@ -164,71 +181,132 @@ def monolithic_pe(row: int = 0, col: int = 0) -> Component:
         (0, 0), (PE_WIDTH, 0), (PE_WIDTH, PE_HEIGHT), (0, PE_HEIGHT)
     ], layer=LAYER_REGION)
 
-    # SFG mixer core (PPLN — the computation)
-    mixer_x, mixer_y = 12, 15
-    mixer_w, mixer_h = 26, 20
+    # --- WDM Demux (AWG 1×6) — splits 6 triplets into dedicated lanes ---
+    demux_x, demux_y = 8, 35
+    demux_w, demux_h = 10, 10
     c.add_polygon([
-        (mixer_x, mixer_y),
-        (mixer_x + mixer_w, mixer_y),
-        (mixer_x + mixer_w, mixer_y + mixer_h),
-        (mixer_x, mixer_y + mixer_h)
-    ], layer=LAYER_CHI2_SFG)
+        (demux_x, demux_y),
+        (demux_x + demux_w, demux_y),
+        (demux_x + demux_w, demux_y + demux_h),
+        (demux_x, demux_y + demux_h)
+    ], layer=LAYER_AWG)
+    c.add_label("DEMUX", position=(demux_x + demux_w/2, demux_y + demux_h + 1), layer=LAYER_TEXT)
 
-    # PPLN poling stripes
-    for i in range(int(mixer_w / 3)):
-        x = mixer_x + i * 3 + 0.5
+    # --- 6 Parallel PPLN SFG Mixers ---
+    mixer_region_x = 8
+    mixer_region_y = 12
+    lane_width = 4.0        # μm per mixer lane
+    lane_spacing = 1.5      # μm between lanes
+    mixer_h = 20.0          # μm mixer length (PPLN interaction region)
+
+    for lane in range(N_LANES):
+        lane_x = mixer_region_x + lane * (lane_width + lane_spacing)
+        # PPLN mixer block
         c.add_polygon([
-            (x, mixer_y + 2), (x + 1.5, mixer_y + 2),
-            (x + 1.5, mixer_y + mixer_h - 2), (x, mixer_y + mixer_h - 2)
-        ], layer=LAYER_HEATER)
+            (lane_x, mixer_region_y),
+            (lane_x + lane_width, mixer_region_y),
+            (lane_x + lane_width, mixer_region_y + mixer_h),
+            (lane_x, mixer_region_y + mixer_h)
+        ], layer=LAYER_CHI2_SFG)
+
+        # PPLN poling stripes per lane (QPM period varies by triplet)
+        qpm = TRIPLET_QPM_PERIODS[lane + 1]
+        stripe_period = qpm  # Full period
+        stripe_w = qpm / 2.0  # Half-period domain
+        n_stripes = max(int(mixer_h / stripe_period), 1)
+        for s in range(n_stripes):
+            sy = mixer_region_y + s * stripe_period + 0.2
+            sh = min(stripe_w - 0.4, mixer_region_y + mixer_h - sy - 0.2)
+            if sh > 0.2:
+                c.add_polygon([
+                    (lane_x + 0.3, sy),
+                    (lane_x + lane_width - 0.3, sy),
+                    (lane_x + lane_width - 0.3, sy + sh),
+                    (lane_x + 0.3, sy + sh)
+                ], layer=LAYER_PPLN_STRIPES)
+
+        # Lane label
+        c.add_label(f"T{lane+1}", position=(lane_x + lane_width/2, mixer_region_y - 1), layer=LAYER_TEXT)
+
+    # --- WDM Mux (AWG 6×1) — recombines SFG outputs ---
+    mux_x, mux_y = 8, 2
+    mux_w, mux_h = 10, 8
+    c.add_polygon([
+        (mux_x, mux_y),
+        (mux_x + mux_w, mux_y),
+        (mux_x + mux_w, mux_y + mux_h),
+        (mux_x, mux_y + mux_h)
+    ], layer=LAYER_AWG)
+    c.add_label("MUX", position=(mux_x + mux_w/2, mux_y - 1), layer=LAYER_TEXT)
+
+    # Routing waveguides from demux to mixers (fan-out)
+    for lane in range(N_LANES):
+        lane_x = mixer_region_x + lane * (lane_width + lane_spacing) + lane_width / 2
+        c.add_polygon([
+            (lane_x - WAVEGUIDE_WIDTH/2, demux_y),
+            (lane_x + WAVEGUIDE_WIDTH/2, demux_y),
+            (lane_x + WAVEGUIDE_WIDTH/2, mixer_region_y + mixer_h),
+            (lane_x - WAVEGUIDE_WIDTH/2, mixer_region_y + mixer_h)
+        ], layer=LAYER_WAVEGUIDE)
+
+    # Routing waveguides from mixers to mux (fan-in)
+    for lane in range(N_LANES):
+        lane_x = mixer_region_x + lane * (lane_width + lane_spacing) + lane_width / 2
+        c.add_polygon([
+            (lane_x - WAVEGUIDE_WIDTH/2, mux_y + mux_h),
+            (lane_x + WAVEGUIDE_WIDTH/2, mux_y + mux_h),
+            (lane_x + WAVEGUIDE_WIDTH/2, mixer_region_y),
+            (lane_x - WAVEGUIDE_WIDTH/2, mixer_region_y)
+        ], layer=LAYER_WAVEGUIDE)
 
     # Accumulator loop (recirculating delay)
-    acc_x = 40
+    acc_x = 44
     acc_y = 8
     c.add_polygon([
         (acc_x, acc_y), (acc_x + 8, acc_y),
         (acc_x + 8, acc_y + 12), (acc_x, acc_y + 12)
     ], layer=LAYER_WAVEGUIDE)
 
-    # Horizontal input waveguide (activation from left)
+    # Horizontal input waveguide (activation from left → demux)
     c.add_polygon([
         (0, PE_HEIGHT/2 - WAVEGUIDE_WIDTH/2),
-        (mixer_x, PE_HEIGHT/2 - WAVEGUIDE_WIDTH/2),
-        (mixer_x, PE_HEIGHT/2 + WAVEGUIDE_WIDTH/2),
+        (demux_x, PE_HEIGHT/2 - WAVEGUIDE_WIDTH/2),
+        (demux_x, PE_HEIGHT/2 + WAVEGUIDE_WIDTH/2),
         (0, PE_HEIGHT/2 + WAVEGUIDE_WIDTH/2)
     ], layer=LAYER_WAVEGUIDE)
 
-    # Horizontal output waveguide (activation passthrough to right)
+    # Horizontal output waveguide (mux → activation passthrough to right)
+    mixer_end_x = mixer_region_x + N_LANES * (lane_width + lane_spacing)
     c.add_polygon([
-        (mixer_x + mixer_w, PE_HEIGHT/2 - WAVEGUIDE_WIDTH/2),
+        (mixer_end_x, PE_HEIGHT/2 - WAVEGUIDE_WIDTH/2),
         (PE_WIDTH, PE_HEIGHT/2 - WAVEGUIDE_WIDTH/2),
         (PE_WIDTH, PE_HEIGHT/2 + WAVEGUIDE_WIDTH/2),
-        (mixer_x + mixer_w, PE_HEIGHT/2 + WAVEGUIDE_WIDTH/2)
+        (mixer_end_x, PE_HEIGHT/2 + WAVEGUIDE_WIDTH/2)
     ], layer=LAYER_WAVEGUIDE)
 
     # Vertical input (partial sum from above)
     c.add_polygon([
         (PE_WIDTH/2 - WAVEGUIDE_WIDTH/2, PE_HEIGHT),
         (PE_WIDTH/2 + WAVEGUIDE_WIDTH/2, PE_HEIGHT),
-        (PE_WIDTH/2 + WAVEGUIDE_WIDTH/2, mixer_y + mixer_h),
-        (PE_WIDTH/2 - WAVEGUIDE_WIDTH/2, mixer_y + mixer_h)
+        (PE_WIDTH/2 + WAVEGUIDE_WIDTH/2, demux_y + demux_h),
+        (PE_WIDTH/2 - WAVEGUIDE_WIDTH/2, demux_y + demux_h)
     ], layer=LAYER_CARRY)
 
     # Vertical output (partial sum to below)
     c.add_polygon([
-        (PE_WIDTH/2 - WAVEGUIDE_WIDTH/2, mixer_y),
-        (PE_WIDTH/2 + WAVEGUIDE_WIDTH/2, mixer_y),
+        (PE_WIDTH/2 - WAVEGUIDE_WIDTH/2, mux_y),
+        (PE_WIDTH/2 + WAVEGUIDE_WIDTH/2, mux_y),
         (PE_WIDTH/2 + WAVEGUIDE_WIDTH/2, 0),
         (PE_WIDTH/2 - WAVEGUIDE_WIDTH/2, 0)
     ], layer=LAYER_CARRY)
 
-    # Weight input from top (streaming from optical RAM)
-    weight_x = PE_WIDTH - 12
+    # Weight input from top (streaming from NR-IOC, 6 triplets multiplexed)
+    weight_x = PE_WIDTH - 8
     c.add_polygon([
         (weight_x - WAVEGUIDE_WIDTH/2, PE_HEIGHT),
         (weight_x + WAVEGUIDE_WIDTH/2, PE_HEIGHT),
-        (weight_x + WAVEGUIDE_WIDTH/2, mixer_y + mixer_h),
-        (weight_x - WAVEGUIDE_WIDTH/2, mixer_y + mixer_h)
+        (weight_x + WAVEGUIDE_WIDTH/2, demux_y + demux_h),
+        (weight_x - WAVEGUIDE_WIDTH/2, demux_y + demux_h)
     ], layer=LAYER_WEIGHT)
 
     # Ports
@@ -287,11 +365,17 @@ def ioc_input_encoder(row_id: int = 0) -> Component:
             (10 + mzi_width, y_off + mzi_height), (10, y_off + mzi_height)
         ], layer=LAYER_WAVEGUIDE)
 
-        # RF electrode
+        # RF electrode (MZI phase control)
         c.add_polygon([
             (15, y_off + mzi_height + 1), (45, y_off + mzi_height + 1),
             (45, y_off + mzi_height + 3), (15, y_off + mzi_height + 3)
         ], layer=LAYER_HEATER)
+
+        # RF electrode contact pad (internal, not wire-bond)
+        c.add_polygon([
+            (47, y_off + mzi_height - 1), (57, y_off + mzi_height - 1),
+            (57, y_off + mzi_height + 5), (47, y_off + mzi_height + 5)
+        ], layer=LAYER_METAL_INT)
 
         c.add_label(label, position=(30, y_off + mzi_height/2), layer=LAYER_TEXT)
 
@@ -320,10 +404,10 @@ def ioc_input_encoder(row_id: int = 0) -> Component:
     c.add_port("encoded_out", center=(width, height/2), width=WAVEGUIDE_WIDTH,
                orientation=0, layer=LAYER_WAVEGUIDE)
 
-    # Control pads
+    # Control pads (internal — not wire-bond)
     c.add_polygon([
         (5, height - 8), (25, height - 8), (25, height - 2), (5, height - 2)
-    ], layer=LAYER_METAL_PAD)
+    ], layer=LAYER_METAL_INT)
     c.add_label(f"ENC_{row_id}", position=(15, height + 2), layer=LAYER_TEXT)
 
     return c
@@ -378,12 +462,12 @@ def ioc_output_decoder(col_id: int = 0) -> Component:
             (pd_x + 20, pd_y + 6), (pd_x, pd_y + 6)
         ], layer=LAYER_DETECTOR)
 
-    # Result encoder block
+    # Result encoder block (internal electronics — not wire-bond)
     enc_x = pd_x + 30
     c.add_polygon([
         (enc_x, 10), (enc_x + 30, 10),
         (enc_x + 30, height - 10), (enc_x, height - 10)
-    ], layer=LAYER_METAL_PAD)
+    ], layer=LAYER_METAL_INT)
     c.add_label("5->3", position=(enc_x + 15, height/2), layer=LAYER_TEXT)
 
     # Input port (from array)
@@ -596,11 +680,11 @@ def kerr_clock_unit() -> Component:
         (-ring_radius - 5, -ring_radius - 3 + WAVEGUIDE_WIDTH/2)
     ], layer=LAYER_WAVEGUIDE)
 
-    # Pump input pad
+    # Pump input pad (internal — not wire-bond)
     c.add_polygon([
         (-8, ring_radius + 2), (8, ring_radius + 2),
         (8, ring_radius + 10), (-8, ring_radius + 10)
-    ], layer=LAYER_METAL_PAD)
+    ], layer=LAYER_METAL_INT)
 
     # Labels
     c.add_label("617 MHz", position=(0, 0), layer=LAYER_TEXT)
@@ -739,10 +823,11 @@ def monolithic_chip_9x9(
                 ], layer=LAYER_WAVEGUIDE)
 
             # Vertical waveguide between PEs in same column
+            # Only fill the gap between PEs (PE internal carries handle the rest)
             if row > 0:
                 x = pe_x + PE_WIDTH / 2
-                y_start = ARRAY_Y + (row - 1) * PE_PITCH
-                y_end = ARRAY_Y + row * PE_PITCH + PE_HEIGHT
+                y_start = ARRAY_Y + (row - 1) * PE_PITCH + PE_HEIGHT  # Top of previous PE
+                y_end = ARRAY_Y + row * PE_PITCH                       # Bottom of current PE
                 c.add_polygon([
                     (x - WAVEGUIDE_WIDTH/2, y_start),
                     (x + WAVEGUIDE_WIDTH/2, y_start),
@@ -801,30 +886,32 @@ def monolithic_chip_9x9(
 
         # Route down, then right to decoder
         # Vertical segment down to routing channel
-        route_y = ARRAY_Y - 5 - col * 3  # Stagger to avoid crossing
+        route_y = ARRAY_Y - 5 - col * 3  # Stagger Y to avoid crossing
         c.add_polygon([
-            (col_x - WAVEGUIDE_WIDTH/2, col_bottom_y),
-            (col_x + WAVEGUIDE_WIDTH/2, col_bottom_y),
+            (col_x - WAVEGUIDE_WIDTH/2, route_y),
             (col_x + WAVEGUIDE_WIDTH/2, route_y),
-            (col_x - WAVEGUIDE_WIDTH/2, route_y)
+            (col_x + WAVEGUIDE_WIDTH/2, col_bottom_y),
+            (col_x - WAVEGUIDE_WIDTH/2, col_bottom_y)
         ], layer=LAYER_CARRY)
 
-        # Horizontal segment to right edge
-        dec_x = IOC_OUTPUT_X
+        # Stagger X for vertical rise to decoder (3 um apart per column)
+        rise_x = IOC_OUTPUT_X + 5 + col * 3  # Each column at different X
         dec_y = ARRAY_Y + col * PE_PITCH + PE_HEIGHT / 2
+
+        # Horizontal segment to rise point
         c.add_polygon([
             (col_x, route_y - WAVEGUIDE_WIDTH/2),
-            (dec_x + 5, route_y - WAVEGUIDE_WIDTH/2),
-            (dec_x + 5, route_y + WAVEGUIDE_WIDTH/2),
+            (rise_x, route_y - WAVEGUIDE_WIDTH/2),
+            (rise_x, route_y + WAVEGUIDE_WIDTH/2),
             (col_x, route_y + WAVEGUIDE_WIDTH/2)
         ], layer=LAYER_CARRY)
 
         # Vertical segment up to decoder input
         c.add_polygon([
-            (dec_x + 5 - WAVEGUIDE_WIDTH/2, route_y),
-            (dec_x + 5 + WAVEGUIDE_WIDTH/2, route_y),
-            (dec_x + 5 + WAVEGUIDE_WIDTH/2, dec_y),
-            (dec_x + 5 - WAVEGUIDE_WIDTH/2, dec_y)
+            (rise_x - WAVEGUIDE_WIDTH/2, route_y),
+            (rise_x + WAVEGUIDE_WIDTH/2, route_y),
+            (rise_x + WAVEGUIDE_WIDTH/2, dec_y),
+            (rise_x - WAVEGUIDE_WIDTH/2, dec_y)
         ], layer=LAYER_CARRY)
 
     # =========================================================================
@@ -931,6 +1018,67 @@ def monolithic_chip_9x9(
         c.add_label("(not distributed to PEs)",
                      position=(clock_x, clock_y - 35),
                      layer=LAYER_TEXT)
+
+    # =========================================================================
+    # Wire-Bond Pad Ring (proper 100x100 um pads at chip periphery)
+    # =========================================================================
+
+    print("  Adding wire-bond pad ring...")
+
+    PAD_SIZE = 100.0       # um — wire-bond minimum
+    PAD_MARGIN = 55.0      # um from chip edge to pad edge (satisfies EDGE.1 50 um)
+    PAD_PITCH = 150.0      # um center-to-center (satisfies MTL2.S.1 50 um)
+
+    pad_count = 0
+
+    # Left edge pads (9 laser inputs + 1 pump)
+    for i in range(10):
+        pad_y = MARGIN_Y + i * PAD_PITCH
+        if pad_y + PAD_SIZE > CHIP_HEIGHT - PAD_MARGIN:
+            break
+        c.add_polygon([
+            (PAD_MARGIN, pad_y),
+            (PAD_MARGIN + PAD_SIZE, pad_y),
+            (PAD_MARGIN + PAD_SIZE, pad_y + PAD_SIZE),
+            (PAD_MARGIN, pad_y + PAD_SIZE)
+        ], layer=LAYER_METAL_PAD)
+        c.add_label(f"L{i}", position=(PAD_MARGIN + PAD_SIZE/2, pad_y + PAD_SIZE/2),
+                    layer=LAYER_TEXT)
+        pad_count += 1
+
+    # Right edge pads (9 data outputs + 1 ground)
+    for i in range(10):
+        pad_y = MARGIN_Y + i * PAD_PITCH
+        if pad_y + PAD_SIZE > CHIP_HEIGHT - PAD_MARGIN:
+            break
+        pad_x = CHIP_WIDTH - PAD_MARGIN - PAD_SIZE
+        c.add_polygon([
+            (pad_x, pad_y),
+            (pad_x + PAD_SIZE, pad_y),
+            (pad_x + PAD_SIZE, pad_y + PAD_SIZE),
+            (pad_x, pad_y + PAD_SIZE)
+        ], layer=LAYER_METAL_PAD)
+        c.add_label(f"R{i}", position=(pad_x + PAD_SIZE/2, pad_y + PAD_SIZE/2),
+                    layer=LAYER_TEXT)
+        pad_count += 1
+
+    # Bottom edge pads (power, ground, test)
+    for i in range(4):
+        pad_x = MARGIN_X + IOC_INPUT_WIDTH + ROUTING_GAP + i * PAD_PITCH
+        if pad_x + PAD_SIZE > CHIP_WIDTH - MARGIN_X:
+            break
+        c.add_polygon([
+            (pad_x, PAD_MARGIN),
+            (pad_x + PAD_SIZE, PAD_MARGIN),
+            (pad_x + PAD_SIZE, PAD_MARGIN + PAD_SIZE),
+            (pad_x, PAD_MARGIN + PAD_SIZE)
+        ], layer=LAYER_METAL_PAD)
+        c.add_label(f"B{i}", position=(pad_x + PAD_SIZE/2, PAD_MARGIN + PAD_SIZE/2),
+                    layer=LAYER_TEXT)
+        pad_count += 1
+
+    print(f"    Placed {pad_count} wire-bond pads ({PAD_SIZE:.0f}x{PAD_SIZE:.0f} um, "
+          f"{PAD_PITCH:.0f} um pitch)")
 
     # =========================================================================
     # Title Block & Specifications
