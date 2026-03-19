@@ -96,9 +96,9 @@ trit_a, trit_b
 
 The waveguide routing regions are optimized using inverse design to shape a SiN refractive index distribution that routes each frequency to its dedicated output port.
 
-**BPM optimizer (routing design):** Beam Propagation Method, split-step Fourier, fully differentiable via JAX. Used for initial inverse design — far better gradient flow than FDTD for this problem (~300 steps, each autodiffable).
+**BPM optimizer (initial warm-start):** Beam Propagation Method, split-step Fourier, fully differentiable via JAX. Used for initial inverse design — good gradient flow but blind to reflections (paraxial approximation). BPM designs require FDTD refinement before fabrication.
 
-**FDTD adjoint (full EM validation):** JAX-based adjoint FDTD verifies routing under the full Maxwell equations, beyond BPM's paraxial approximation.
+**FDTD adjoint optimizer (production design):** JAX-based adjoint FDTD optimizes waveguide routing under the full Maxwell equations. Uses BPM density as warm-start, then refines against full EM physics including reflections, back-scattering, and mode coupling. This is the optimizer that produces foundry-ready designs.
 
 ### Design Parameters
 
@@ -147,17 +147,35 @@ Complete cascade (multiply unit → 81-port demux) validated across all 3⁹ inp
 
 GDS files exported and foundry-ready: `multiply_unit.gds`, `demux_81port.gds`.
 
-### FDTD Full Electromagnetic Validation
+### FDTD Validation of BPM Designs (Before Optimization)
 
-Full Maxwell equations validation beyond BPM paraxial approximation.
+BPM-designed geometries validated under full Maxwell equations — exposed critical failures:
 
-| Component                           | Result              | Notes                                             |
-|:------------------------------------|:--------------------|:--------------------------------------------------|
-| Multiply unit                       | **3/3 PASS** ✅     |                                                   |
-| Demux — 40×96 µm chip               | **4/19 PASS**       | Reflections + tight routing at high-Q             |
-| Demux — 80×96 µm chip (larger)      | ⏳ In progress      | More routing space to reduce reflection artifacts |
+| Component                           | BPM Result     | FDTD Result         | Notes                                             |
+|:------------------------------------|:---------------|:--------------------|:--------------------------------------------------|
+| Multiply unit                       | 6/6 PASS       | **1/3 PASS**        | Reflections route power to wrong ports            |
+| Demux — 40×96 µm chip               | 18/19 PASS     | **1/19 PASS**       | Power scattered uniformly — no routing            |
 
-Root cause of demux FDTD failures: reflections and tight bend geometry — not cross-talk. The BPM paraxial approximation breaks down in high-Q routing. Larger chip (2× routing space) currently running on RunPod A40.
+Root cause: BPM is a forward-only paraxial approximation — it cannot see reflections, back-scattering, or standing waves. Designs that appear perfect under BPM fail catastrophically under real physics.
+
+### FDTD Adjoint Inverse Design — Multiply Unit (100% Efficiency) ✅
+
+FDTD adjoint optimizer takes the BPM design as warm-start and optimizes directly against full Maxwell equations. Run on RunPod NVIDIA A40 48 GB — 300 iterations, ~28 minutes.
+
+| Iteration | Efficiency | Loss     | Notes                              |
+|:---------:|:----------:|:--------:|:-----------------------------------|
+| 10        | 98.2%      | -0.9821  | Rapid initial convergence          |
+| 40        | 100.0%     | -1.0000  | Locked in                          |
+| 100       | 100.0%     | -1.0000  | Saturated at float32 precision     |
+| 300       | 100.0%     | -1.0000  | Held through end of optimization   |
+
+**Average iteration time: 3.6 seconds.** Each iteration runs a full 40,000-step FDTD forward pass + adjoint backward pass through JAX autodiff with gradient checkpointing.
+
+The BPM design failed FDTD at 33% (1/3 ports correct). The FDTD optimizer fixed it to 100% in 40 iterations. Independent validation with extinction ratios pending.
+
+### Demux FDTD Optimization — In Progress
+
+The 19-port demux (BPM: 1/19 PASS under FDTD) will use the same FDTD adjoint approach. Estimated 25–75 hours on A40.
 
 ---
 
@@ -196,12 +214,14 @@ NRadix_Accelerator/
 ├── simulation/
 │   ├── trit_multiplier_inverse_design.py  # BPM optimizer
 │   ├── fdtd_inverse_design.py             # FDTD adjoint optimizer (JAX)
+│   ├── run_fdtd_optimize.sh              # RunPod launcher (tmux + auto-push)
 │   ├── run_demux_large.py                 # Large chip FDTD test (80×96 µm)
 │   └── results/
 │       ├── validation_results.json        # 9/9 BPM PASS
 │       ├── mac_full_validation.json       # 2000/2000 end-to-end PASS
-│       ├── multiply_unit.gds              # Foundry-ready GDS
-│       └── demux_81port.gds              # Foundry-ready GDS
+│       ├── multiply_unit_density_fdtd.npy # FDTD-optimized multiply unit design
+│       ├── multiply_unit.gds              # GDS (BPM design — to be replaced)
+│       └── demux_81port.gds              # GDS (BPM design — to be replaced)
 ├── tests/
 │   └── test_systolic_array_2d.py
 └── scripts/
@@ -217,18 +237,22 @@ NRadix_Accelerator/
 Requires JAX with CUDA 12. Recommended: RunPod with an A40 or A100.
 
 ```bash
-pip install jax[cuda12] numpy matplotlib gdstk
+pip install jax[cuda12] numpy scipy matplotlib gdstk
 
 cd NRadix_Accelerator/simulation
 
-# BPM inverse design (~18 min on L4)
+# BPM inverse design — warm-start only (~18 min on L4)
 python trit_multiplier_inverse_design.py
 
-# FDTD full EM validation (hours on A40)
+# FDTD adjoint optimization — production design (~28 min on A40)
+python fdtd_inverse_design.py multiply_unit
+
+# FDTD adjoint optimization — demux (~25-75 hrs on A40)
 python fdtd_inverse_design.py demux
 
-# Large chip FDTD test
-python run_demux_large.py
+# RunPod launcher (tmux + auto-push to GitHub)
+export GITHUB_TOKEN=ghp_your_token
+bash run_fdtd_optimize.sh multiply_unit
 ```
 
 ---
@@ -241,11 +265,13 @@ python run_demux_large.py
 - [x] BPM inverse design validated — 9/9 PASS, ER 11.5–14.8 dB
 - [x] 9×9 systolic array architecture
 - [x] Power budget and timing model
-- [x] GDS export — `multiply_unit.gds`, `demux_81port.gds`
-- [x] Full MAC inverse design — **2000/2000 PASS (100%)** across all 3⁹ inputs
-- [x] FDTD adjoint optimizer (JAX)
-- [x] FDTD validation — multiply unit **3/3 PASS**
-- [ ] FDTD validation — demux (4/19 on standard chip; large chip test in progress)
+- [x] GDS export — `multiply_unit.gds`, `demux_81port.gds` (BPM-based, to be replaced)
+- [x] Full MAC inverse design — **2000/2000 PASS (100%)** across all 3⁹ inputs (BPM)
+- [x] FDTD adjoint optimizer (JAX, gradient checkpointing, Adam)
+- [x] FDTD adjoint optimization — multiply unit **100% efficiency** (BPM→FDTD: 33%→100%)
+- [ ] Independent FDTD validation of optimized multiply unit (extinction ratios, power fractions)
+- [ ] FDTD adjoint optimization — demux (19-port, BPM design at 5.3% under FDTD)
+- [ ] Export new GDS from FDTD-optimized densities
 - [ ] Foundry tapeout
 - [ ] Multi-trit accumulation and carry logic
 
