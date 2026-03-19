@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "/workspace/New-ternary-optical-computer/NRadix_Accelerator/simulation/fdtd_inverse_design.py", line 14, in <module>
+    import jax
+ModuleNotFoundError: No module named 'jax'
