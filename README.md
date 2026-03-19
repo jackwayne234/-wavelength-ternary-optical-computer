@@ -173,9 +173,22 @@ FDTD adjoint optimizer takes the BPM design as warm-start and optimizes directly
 
 The BPM design failed FDTD at 33% (1/3 ports correct). The FDTD optimizer fixed it to 100% in 40 iterations. Independent validation with extinction ratios pending.
 
-### Demux FDTD Optimization — In Progress
+### FDTD Adjoint Inverse Design — Demux 19-Port (99.8% Efficiency) ✅
 
-The 19-port demux (BPM: 1/19 PASS under FDTD) will use the same FDTD adjoint approach. Estimated 25–75 hours on A40.
+FDTD adjoint optimizer on RunPod NVIDIA B200 192 GB — 300 iterations, ~16 minutes.
+
+| Iteration | Efficiency | Loss     | Notes                              |
+|:---------:|:----------:|:--------:|:-----------------------------------|
+| 10        | 13.9%      | -0.1390  | Starting from BPM warm-start       |
+| 50        | 52.4%      | -0.5238  | Past 50%                           |
+| 200       | 74.3%      | -0.7428  | Oscillating (LR too aggressive)    |
+| 260       | 81.8%      | -0.8182  | Convergence begins                 |
+| 270       | 93.4%      | -0.9342  | Rapid climb                        |
+| 280       | 97.9%      | -0.9788  | Near-complete                      |
+| 290       | 99.3%      | -0.9933  | Locked in                          |
+| 300       | 99.8%      | -0.9980  | Final — near-perfect routing       |
+
+**Average iteration time: 3.125 seconds.** The BPM design failed FDTD at 5.3% (1/19 ports correct). The FDTD optimizer achieved 99.8% in 300 iterations.
 
 ---
 
@@ -269,8 +282,8 @@ bash run_fdtd_optimize.sh multiply_unit
 - [x] Full MAC inverse design — **2000/2000 PASS (100%)** across all 3⁹ inputs (BPM)
 - [x] FDTD adjoint optimizer (JAX, gradient checkpointing, Adam)
 - [x] FDTD adjoint optimization — multiply unit **100% efficiency** (BPM→FDTD: 33%→100%)
-- [ ] Independent FDTD validation of optimized multiply unit (extinction ratios, power fractions)
-- [ ] FDTD adjoint optimization — demux (19-port, BPM design at 5.3% under FDTD)
+- [x] FDTD adjoint optimization — demux **99.8% efficiency** (BPM→FDTD: 5.3%→99.8%)
+- [ ] Independent FDTD validation of both components (extinction ratios, power fractions)
 - [ ] Export new GDS from FDTD-optimized densities
 - [ ] Foundry tapeout
 - [ ] Multi-trit accumulation and carry logic
