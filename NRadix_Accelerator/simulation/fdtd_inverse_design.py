@@ -547,6 +547,9 @@ def optimize_density(
 
     iter_times = []
 
+    # History for JSON export
+    history = []
+
     for i in range(1, n_iterations + 1):
         t_start = time.perf_counter()
 
@@ -560,18 +563,31 @@ def optimize_density(
         density = jnp.clip(density, 0.0, 1.0)
 
         t_end = time.perf_counter()
+        iter_time = t_end - t_start
         if i > 1:
-            iter_times.append(t_end - t_start)
+            iter_times.append(iter_time)
+
+        loss_f = float(loss_val)
+        # loss = -mean_efficiency, so efficiency = -loss
+        mean_eff = -loss_f
 
         if i % log_every == 0:
             avg_t = np.mean(iter_times[-log_every:]) if iter_times else float("nan")
+            eta_s = avg_t * (n_iterations - i) if not np.isnan(avg_t) else float("nan")
+            eta_m = eta_s / 60.0
             print(
-                f"  iter {i:4d}/{n_iterations}  loss={float(loss_val):.4f}  "
-                f"avg_iter_time={avg_t:.3f}s"
+                f"  iter {i:4d}/{n_iterations}  loss={loss_f:.4f}  "
+                f"efficiency={mean_eff:.1%}  "
+                f"iter_time={iter_time:.1f}s  ETA={eta_m:.0f}min"
             )
 
         if i % save_every == 0:
             np.save(save_path, np.array(density))
+            history.append({"iter": i, "loss": loss_f, "efficiency": mean_eff})
+            # Save history alongside density
+            history_path = save_path.replace(".npy", "_history.json")
+            with open(history_path, "w") as f:
+                json.dump(history, f, indent=2)
             print(f"  Saved checkpoint: {save_path}")
 
     np.save(save_path, np.array(density))
@@ -751,10 +767,23 @@ def main():
         save_path = str(results_dir / "demux_density_fdtd.npy")
 
     nx, ny = grid_shape
+    expected_shape = (design_region["nx"], design_region["ny"])
     print(f"Grid: {nx} x {ny} cells  (dx={DX*1e9:.1f} nm, dy={DY*1e9:.1f} nm)")
+    print(f"Design region: {expected_shape[0]} x {expected_shape[1]} cells")
     print(f"Target frequencies ({len(target_freqs_hz)}):")
     for val, freq in zip(sorted_vals, target_freqs_hz):
         print(f"  val={val:+d}  {freq/1e12:.4f} THz")
+
+    # Validate density shape matches design region
+    if initial_density.shape != expected_shape:
+        print(f"\n  WARNING: density shape {initial_density.shape} != design region {expected_shape}")
+        print(f"  Resizing density to match design region...")
+        from scipy.ndimage import zoom
+        zoom_factors = (expected_shape[0] / initial_density.shape[0],
+                        expected_shape[1] / initial_density.shape[1])
+        initial_density = zoom(initial_density, zoom_factors, order=1)
+        initial_density = np.clip(initial_density, 0.0, 1.0)
+        print(f"  Resized to: {initial_density.shape}")
 
     source_x_cell = max(int(input_wgs[0]["x_end"] / DX) - 3, PML_CELLS + 2)
     n_bg = make_n_background(grid_shape, input_wgs, output_wgs)
@@ -764,6 +793,7 @@ def main():
     print("  Grid:", grid_shape)
     print("  n_steps per forward pass:", n_steps)
     print("  Gradient computed via JAX autodiff through lax.scan + jax.checkpoint")
+    print("  Checkpoints save every 50 iterations")
 
     optimized_density = optimize_density(
         initial_density=initial_density,
