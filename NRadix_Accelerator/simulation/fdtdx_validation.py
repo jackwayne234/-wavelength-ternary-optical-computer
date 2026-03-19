@@ -805,9 +805,16 @@ def compare_with_bpm(fdtd_results: dict, results_dir: Path) -> dict:
 # ============================================================================
 
 def main():
+    import sys
+    use_fdtd = "--fdtd" in sys.argv
+
     print("=" * 70)
     print("  NRadix FDTD Electromagnetic Validation")
     print("  2D TE-mode Maxwell solver with CPML boundaries")
+    if use_fdtd:
+        print("  MODE: Validating FDTD-optimized designs")
+    else:
+        print("  MODE: Validating BPM designs")
     print("=" * 70)
     print(f"\n  Grid: {DX*1e9:.0f} nm  |  dt: {DT*1e15:.3f} fs  |  "
           f"Source: {SOURCE_F_CENTER*1e-12:.0f} THz ± {SOURCE_BW*1e-12:.0f} THz")
@@ -820,12 +827,19 @@ def main():
         print("  Run mac_inverse_design.py first to generate density arrays.")
         return
 
+    # Select density file names based on mode
+    if use_fdtd:
+        mul_file   = "multiply_unit_density_fdtd.npy"
+        demux_file = "demux_density_fdtd.npy"
+    else:
+        mul_file   = "multiply_unit_density.npy"
+        demux_file = "demux_density.npy"
+
     # Check for required files
-    required = ["frequency_assignment.json", "multiply_unit_density.npy", "demux_density.npy"]
+    required = ["frequency_assignment.json", mul_file, demux_file]
     missing  = [f for f in required if not (results_dir / f).exists()]
     if missing:
         print(f"\n  ERROR: Missing required files: {missing}")
-        print("  Run mac_inverse_design.py first.")
         return
 
     # ----- Load frequency assignment -----
@@ -837,11 +851,14 @@ def main():
     print(f"  Demux: {len(demux_freqs)} output channels")
 
     # ----- Load density arrays -----
-    print("\nLoading density arrays...")
-    mul_density   = np.load(results_dir / "multiply_unit_density.npy")
-    demux_density = np.load(results_dir / "demux_density.npy")
+    print(f"\nLoading density arrays ({mul_file}, {demux_file})...")
+    mul_density   = np.load(results_dir / mul_file)
+    demux_density = np.load(results_dir / demux_file)
     print(f"  Multiply unit density: {mul_density.shape}")
     print(f"  Demux density:         {demux_density.shape}")
+
+    # For FDTD-optimized demux, use 120nm grid spacing (matches optimizer)
+    # Multiply unit stays at 80nm (matches its optimizer)
 
     fdtd_results = {}
     t_total = time.time()
@@ -856,8 +873,18 @@ def main():
     print(f"\n  Saved intermediate: results/fdtdx_validation_mul.json")
 
     # ----- Validate demux -----
+    # Switch to 120nm grid for FDTD-optimized demux
+    if use_fdtd:
+        global DX, DY, DT
+        DX = DY = 120e-9
+        DT = CFL * DX / (C_LIGHT * math.sqrt(2.0))
+        print(f"\n  Switched to 120nm grid for demux (matches FDTD optimizer)")
     demux_val = validate_demux(demux_density, fa, results_dir)
     fdtd_results["demux"] = demux_val
+    # Restore 80nm for any subsequent operations
+    if use_fdtd:
+        DX = DY = 80e-9
+        DT = CFL * DX / (C_LIGHT * math.sqrt(2.0))
 
     # ----- Compare with BPM -----
     print("\n" + "=" * 70)
@@ -882,7 +909,7 @@ def main():
         "total_runtime_s": time.time() - t_total,
     }
 
-    out_path = results_dir / "fdtdx_validation.json"
+    out_path = results_dir / ("fdtdx_validation_fdtd_optimized.json" if use_fdtd else "fdtdx_validation.json")
     with open(out_path, "w") as f:
         json.dump(output, f, indent=2)
 
