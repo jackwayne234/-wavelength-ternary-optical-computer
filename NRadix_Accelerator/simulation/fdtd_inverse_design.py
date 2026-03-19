@@ -25,7 +25,7 @@ ETA0    = math.sqrt(MU0 / EPS0)
 # ---------------------------------------------------------------------------
 # Grid / material constants
 # ---------------------------------------------------------------------------
-DX = DY = 80e-9
+DX = DY = 80e-9  # default; overridden for demux (see main())
 N_CORE  = 2.2
 N_CLAD  = 1.44
 WG_WIDTH = 0.5e-6
@@ -758,12 +758,18 @@ def main():
         save_path = str(results_dir / "multiply_unit_density_fdtd.npy")
 
     else:  # demux
+        # Use coarser grid for demux to fit in GPU memory during JIT
+        # 120nm spacing → 333×800 grid instead of 500×1200
+        global DX, DY, DT
+        DX = DY = 120e-9
+        DT = CFL * DX / (C_LIGHT * math.sqrt(2.0))
+
         demux_freqs = get_demux_freqs(fa)
         input_wgs, output_wgs, monitors, design_region, grid_shape = make_demux_waveguides(fa)
         sorted_vals = sorted(demux_freqs.keys())
         target_freqs_hz = np.array([demux_freqs[v] for v in sorted_vals])
         initial_density = np.load(results_dir / "demux_density.npy")
-        n_steps = 60_000
+        n_steps = 40_000  # fewer steps needed at coarser grid (larger DT)
         save_path = str(results_dir / "demux_density_fdtd.npy")
 
     nx, ny = grid_shape
