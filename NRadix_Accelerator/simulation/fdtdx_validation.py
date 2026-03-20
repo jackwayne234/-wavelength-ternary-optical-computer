@@ -518,9 +518,9 @@ def make_demux_waveguides(fa: dict) -> Tuple[list, list, list, dict, Tuple[int,i
     Mirrors DemuxConfig + create_demux_sim() logic.
     """
     N_INPUTS   = 9
-    domain_x   = 40e-6
+    domain_x   = 60e-6   # 1.5× wider for high-port routing space
     domain_y   = 96e-6
-    design_x   = 35e-6
+    design_x   = 55e-6   # 1.5× wider design region
     design_y   = 90e-6
     design_x_off = 2.5e-6
     design_y_off = 3.0e-6
