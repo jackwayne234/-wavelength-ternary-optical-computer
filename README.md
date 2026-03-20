@@ -220,6 +220,45 @@ FDTD adjoint optimizer on RunPod NVIDIA B200 192 GB — 600 iterations with beta
 
 ---
 
+## Current State & Roadmap
+
+### What This Chip Is
+
+A validated proof-of-concept demonstrating two core passive photonic components:
+
+1. **3-port multiply unit router** — routes SFG product frequencies to the correct output port (3/3 PASS, 7–15 dB ER)
+2. **19-port wavelength demux** — routes 19 MAC accumulation values across the C-band to dedicated output ports (19/19 PASS, 20–30 dB ER, 99.1–99.9% power fractions)
+
+Both components are independently validated under full Maxwell FDTD — not approximations. The designs are fabrication-realistic (fully binarized at beta=12, SiN/SiO₂ compatible).
+
+### What It Proves
+
+- Wavelength-selective ternary multiplication works — the output color IS the answer
+- Inverse-designed waveguide routing can achieve commercial-grade extinction ratios (20–30 dB) across 19 tightly-spaced C-band channels
+- The passive routing problem — the hardest part of the architecture — is solved
+
+### What's Not Yet Validated
+
+- **SFG conversion efficiency** — the nonlinear frequency mixing that performs the actual multiplication. Real PPLN waveguide SFG efficiency is typically 0.1–10% per stage. The passive routing assumes the signal arrives; it doesn't model how much signal the SFG produces.
+- **Full 9×9 MAC array** — the architecture calls for 81 SFG cells, waveguide combining, and per-row demuxing. This chip validates the building blocks, not the full array.
+- **Optical accumulation** — waveguide superposition of multiple SFG outputs needs characterization for signal integrity at scale.
+
+### Roadmap to Full System
+
+| Step | Status | Description |
+|:-----|:------:|:------------|
+| Wavelength assignment & SFG math | ✅ | Frequency encoding, port mapping |
+| BPM inverse design | ✅ | Initial warm-start designs |
+| FDTD adjoint optimization | ✅ | Full EM optimization of both components |
+| Independent FDTD validation | ✅ | 3/3 + 19/19 PASS with 20–30 dB ER |
+| GDS export | 🔜 | Convert FDTD-optimized densities to foundry layout |
+| Foundry tapeout (passive) | 🔜 | SiN MPW run — fabricate and characterize routing |
+| SFG integration | ⏳ | Add PPLN or AlN nonlinear layer for frequency mixing |
+| Full MAC array | ⏳ | Scale from single multiply to 9×9 systolic array |
+| System integration | ⏳ | Laser sources, photodetectors, timing, I/O |
+
+---
+
 ## Power Budget
 
 | Component              | Power       |
