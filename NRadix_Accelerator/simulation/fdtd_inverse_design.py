@@ -426,6 +426,7 @@ def compute_loss(
     n_steps: int,
     source_x_cell: int,
     beta: float = 8.0,
+    channel_weights: jnp.ndarray = None,  # (n_freqs,) per-channel weights
 ) -> jnp.ndarray:                # scalar loss
     # Step 1: build refractive index profile with binarization
     n_profile = make_n_profile(density, n_bg, design_region, beta)
@@ -446,8 +447,12 @@ def compute_loss(
     total_power   = jnp.sum(T, axis=1)      # (n_freqs,)
     efficiency    = correct_power / (total_power + 1e-30)  # (n_freqs,)
 
-    # Step 5: loss = negative mean efficiency (maximize efficiency -> minimize loss)
-    loss = -jnp.mean(efficiency)
+    # Step 5: loss = negative weighted mean efficiency
+    # Channel weights let us apply more gradient pressure to failing channels
+    if channel_weights is not None:
+        loss = -jnp.sum(channel_weights * efficiency) / jnp.sum(channel_weights)
+    else:
+        loss = -jnp.mean(efficiency)
     return loss
 
 
@@ -524,6 +529,7 @@ def optimize_density(
     save_every: int = 50,
     save_path: str = "results/density_fdtd_checkpoint.npy",
     beta_projection: float = 8.0,
+    channel_weights: np.ndarray = None,  # (n_freqs,) per-channel weights for failing channels
 ) -> np.ndarray:
     density = jnp.array(initial_density, dtype=jnp.float32)
     m = jnp.zeros_like(density)
@@ -545,11 +551,14 @@ def optimize_density(
         beta_stages = [beta_projection]
         stage_iters = n_iterations
 
+    # Convert channel weights to JAX array if provided
+    cw_jax = jnp.array(channel_weights, dtype=jnp.float32) if channel_weights is not None else None
+
     def make_grad_fn(beta):
         return jax.jit(jax.value_and_grad(
             lambda d: compute_loss(
                 d, n_bg, design_region, input_wg, output_monitors,
-                target_freqs_hz, n_steps, source_x_cell, beta
+                target_freqs_hz, n_steps, source_x_cell, beta, cw_jax
             )
         ))
 
@@ -835,12 +844,23 @@ def main():
         opt_lr = 0.001
         opt_beta = "fixed"
         opt_beta_val = 12.0
+        # 5× weight on failing channels (ports 11, 15, 17 = indices 11, 15, 17)
+        # These correspond to MAC=+2, MAC=+6, MAC=+8 in the 19-channel demux
+        n_freqs = len(target_freqs_hz)
+        opt_weights = np.ones(n_freqs, dtype=np.float32)
+        failing_indices = [11, 15, 17]  # 0-indexed port/freq indices
+        for idx in failing_indices:
+            if idx < n_freqs:
+                opt_weights[idx] = 5.0
         print(f"  FINETUNE: {opt_iters} iters, lr={opt_lr}, beta={opt_beta_val}")
+        print(f"  Channel weights: {opt_weights.tolist()}")
+        print(f"  Boosted channels: {failing_indices} (5× weight)")
     else:
         opt_iters = 600 if component == "demux" else 300
         opt_lr = 0.02
         opt_beta = "anneal"
         opt_beta_val = 8.0
+        opt_weights = None
 
     optimized_density = optimize_density(
         initial_density=initial_density,
@@ -856,6 +876,7 @@ def main():
         beta_schedule=opt_beta,
         beta_projection=opt_beta_val,
         save_path=save_path,
+        channel_weights=opt_weights,
     )
 
     np.save(save_path, optimized_density)
