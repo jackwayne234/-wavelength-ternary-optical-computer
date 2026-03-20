@@ -530,10 +530,20 @@ def optimize_density(
     v = jnp.zeros_like(density)
     beta1, beta2, eps = 0.9, 0.999, 1e-8
 
-    # TODO: "anneal" schedule requires re-jitting each time beta_projection changes,
-    # which is expensive. Full implementation deferred; falls back to fixed for now.
+    # Beta annealing: gradually increase binarization from soft (4) to hard (12)
+    # This forces the optimizer to find designs that work with fully binary structures
+    # (required for foundry fabrication — no gradient-index features)
     if beta_schedule == "anneal":
-        print("WARNING: beta_schedule='anneal' not fully implemented; using fixed beta.")
+        beta_start = 4.0
+        beta_end   = 12.0
+        # Compile grad functions for each beta stage to avoid constant recompilation
+        # Use 4 stages: beta=4,6,8,12 with JIT reuse within each stage
+        beta_stages = [4.0, 6.0, 8.0, 12.0]
+        stage_iters = n_iterations // len(beta_stages)
+        print(f"  Beta annealing: {beta_stages}, {stage_iters} iters per stage")
+    else:
+        beta_stages = [beta_projection]
+        stage_iters = n_iterations
 
     def make_grad_fn(beta):
         return jax.jit(jax.value_and_grad(
@@ -543,7 +553,9 @@ def optimize_density(
             )
         ))
 
-    grad_fn = make_grad_fn(beta_projection)
+    # Pre-compile first stage
+    current_beta = beta_stages[0]
+    grad_fn = make_grad_fn(current_beta)
 
     iter_times = []
 
@@ -551,6 +563,15 @@ def optimize_density(
     history = []
 
     for i in range(1, n_iterations + 1):
+        # Update beta stage if annealing
+        if beta_schedule == "anneal":
+            stage_idx = min((i - 1) // stage_iters, len(beta_stages) - 1)
+            new_beta = beta_stages[stage_idx]
+            if new_beta != current_beta:
+                current_beta = new_beta
+                grad_fn = make_grad_fn(current_beta)
+                print(f"  Beta → {current_beta:.1f} (re-compiling JIT...)")
+
         t_start = time.perf_counter()
 
         loss_val, grad = grad_fn(density)
@@ -810,8 +831,9 @@ def main():
         target_freqs_hz=target_freqs_hz,
         n_steps=n_steps,
         source_x_cell=source_x_cell,
-        n_iterations=300,
+        n_iterations=600 if component == "demux" else 300,
         learning_rate=0.02,
+        beta_schedule="anneal",  # ramp beta 4→6→8→12 for foundry-ready binarization
         save_path=save_path,
     )
 
