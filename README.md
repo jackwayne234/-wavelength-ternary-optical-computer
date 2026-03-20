@@ -104,9 +104,11 @@ The waveguide routing regions are optimized using inverse design to shape a SiN 
 
 | Parameter             | Value                                          |
 |:----------------------|:-----------------------------------------------|
-| Grid spacing          | 80 nm                                          |
-| Domain size (demux)   | 40 × 96 µm (standard) / 80 × 96 µm (large)    |
-| Design region         | 15 × 25 µm                                     |
+| Grid spacing          | 80 nm (multiply unit) / 120 nm (demux)         |
+| Domain size (multiply)| 20 × 30 µm (250×375 cells)                     |
+| Domain size (demux)   | 60 × 96 µm (500×800 cells)                     |
+| Design region (mul)   | 15 × 25 µm                                     |
+| Design region (demux) | 55 × 90 µm                                     |
 | Core material         | SiN (n = 2.2)                                  |
 | Cladding material     | SiO₂ (n = 1.44)                                |
 | Waveguide width       | 500 nm                                         |
@@ -171,24 +173,50 @@ FDTD adjoint optimizer takes the BPM design as warm-start and optimizes directly
 
 **Average iteration time: 3.6 seconds.** Each iteration runs a full 40,000-step FDTD forward pass + adjoint backward pass through JAX autodiff with gradient checkpointing.
 
-The BPM design failed FDTD at 33% (1/3 ports correct). The FDTD optimizer fixed it to 100% in 40 iterations. Independent validation with extinction ratios pending.
+The BPM design failed FDTD at 33% (1/3 ports correct). The FDTD optimizer fixed it to 100% in 40 iterations.
 
-### FDTD Adjoint Inverse Design — Demux 19-Port (99.8% Efficiency) ✅
+**Independent FDTD validation: 3/3 PASS** — ER 7.0–15.5 dB, power fractions 83–97%.
 
-FDTD adjoint optimizer on RunPod NVIDIA B200 192 GB — 300 iterations, ~16 minutes.
+### FDTD Adjoint Inverse Design — Demux 19-Port (100% Efficiency) ✅
+
+FDTD adjoint optimizer on RunPod NVIDIA B200 192 GB — 600 iterations with beta annealing [4→6→8→12], ~45 minutes. Chip expanded to 60×96 µm for sufficient routing space.
 
 | Iteration | Efficiency | Loss     | Notes                              |
 |:---------:|:----------:|:--------:|:-----------------------------------|
-| 10        | 13.9%      | -0.1390  | Starting from BPM warm-start       |
-| 50        | 52.4%      | -0.5238  | Past 50%                           |
-| 200       | 74.3%      | -0.7428  | Oscillating (LR too aggressive)    |
-| 260       | 81.8%      | -0.8182  | Convergence begins                 |
-| 270       | 93.4%      | -0.9342  | Rapid climb                        |
-| 280       | 97.9%      | -0.9788  | Near-complete                      |
-| 290       | 99.3%      | -0.9933  | Locked in                          |
-| 300       | 99.8%      | -0.9980  | Final — near-perfect routing       |
+| 10        | 35.4%      | -0.3541  | Starting from BPM warm-start       |
+| 30        | 85.0%      | -0.8500  | Rapid initial convergence          |
+| 450       | 100.0%     | -1.0000  | Locked in at beta=8               |
+| 460       | 42.5%      | -0.4250  | Beta→12 drop (expected)            |
+| 560       | 100.0%     | -1.0000  | Recovered and locked at beta=12   |
+| 600       | 100.0%     | -1.0000  | Final — fully binarized design    |
 
-**Average iteration time: 3.125 seconds.** The BPM design failed FDTD at 5.3% (1/19 ports correct). The FDTD optimizer achieved 99.8% in 300 iterations.
+**Average iteration time: 4.5 seconds.** The BPM design failed FDTD at 5.3% (1/19 ports correct). The FDTD optimizer achieved 100% in 600 iterations.
+
+**Independent FDTD validation: 19/19 PASS** — all channels validated under full Maxwell equations:
+
+| Channel   | Freq (THz) | ER (dB) | Power Fraction | Status  |
+|:---------:|:----------:|:-------:|:--------------:|:-------:|
+| MAC=−9    | 192.30     | 30.3    | 99.9%          | ✅ PASS |
+| MAC=−8    | 192.60     | 27.1    | 99.8%          | ✅ PASS |
+| MAC=−7    | 192.90     | 26.7    | 99.8%          | ✅ PASS |
+| MAC=−6    | 193.20     | 26.7    | 99.8%          | ✅ PASS |
+| MAC=−5    | 193.50     | 24.3    | 99.6%          | ✅ PASS |
+| MAC=−4    | 193.80     | 26.5    | 99.8%          | ✅ PASS |
+| MAC=−3    | 194.10     | 25.9    | 99.7%          | ✅ PASS |
+| MAC=−2    | 194.40     | 21.2    | 99.3%          | ✅ PASS |
+| MAC=−1    | 194.70     | 22.4    | 99.4%          | ✅ PASS |
+| MAC=+0    | 195.00     | 26.6    | 99.8%          | ✅ PASS |
+| MAC=+1    | 195.30     | 27.0    | 99.8%          | ✅ PASS |
+| MAC=+2    | 195.60     | 20.5    | 99.1%          | ✅ PASS |
+| MAC=+3    | 195.90     | 28.9    | 99.9%          | ✅ PASS |
+| MAC=+4    | 196.20     | 29.2    | 99.9%          | ✅ PASS |
+| MAC=+5    | 196.50     | 29.1    | 99.9%          | ✅ PASS |
+| MAC=+6    | 196.80     | 27.6    | 99.8%          | ✅ PASS |
+| MAC=+7    | 197.10     | 28.0    | 99.8%          | ✅ PASS |
+| MAC=+8    | 197.40     | 28.3    | 99.9%          | ✅ PASS |
+| MAC=+9    | 197.70     | 23.4    | 99.5%          | ✅ PASS |
+
+**Minimum ER: 20.5 dB | Maximum ER: 30.3 dB | Average power fraction: 99.7%**
 
 ---
 
@@ -283,8 +311,10 @@ bash run_fdtd_optimize.sh multiply_unit
 - [x] FDTD adjoint optimizer (JAX, gradient checkpointing, Adam)
 - [x] FDTD adjoint optimization — multiply unit **100% efficiency** (BPM→FDTD: 33%→100%)
 - [x] FDTD adjoint optimization — demux **99.8% efficiency** (BPM→FDTD: 5.3%→99.8%)
-- [ ] Independent FDTD validation of both components (extinction ratios, power fractions)
+- [x] Independent FDTD validation — multiply unit **3/3 PASS** (7–15 dB ER)
+- [x] Independent FDTD validation — demux **19/19 PASS** (20–30 dB ER, 99.1–99.9% power)
 - [ ] Export new GDS from FDTD-optimized densities
+- [ ] Full cascade validation (all 3⁹ inputs through FDTD-optimized pipeline)
 - [ ] Foundry tapeout
 - [ ] Multi-trit accumulation and carry logic
 
