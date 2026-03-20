@@ -757,7 +757,10 @@ def make_demux_waveguides(fa: dict):
 def main():
     print("NRadix FDTD Adjoint Inverse Design")
 
-    component = sys.argv[1] if len(sys.argv) > 1 else "multiply_unit"
+    # Check for --finetune flag
+    finetune = "--finetune" in sys.argv
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    component = args[0] if args else "multiply_unit"
     if component not in ("multiply_unit", "demux"):
         print(f"Error: unknown component '{component}'. Choose 'multiply_unit' or 'demux'.")
         sys.exit(1)
@@ -789,7 +792,12 @@ def main():
         input_wgs, output_wgs, monitors, design_region, grid_shape = make_demux_waveguides(fa)
         sorted_vals = sorted(demux_freqs.keys())
         target_freqs_hz = np.array([demux_freqs[v] for v in sorted_vals])
-        initial_density = np.load(results_dir / "demux_density.npy")
+        # In finetune mode, load the FDTD-optimized density instead of BPM
+        if finetune:
+            initial_density = np.load(results_dir / "demux_density_fdtd.npy")
+            print("  FINETUNE MODE: loading FDTD-optimized density")
+        else:
+            initial_density = np.load(results_dir / "demux_density.npy")
         n_steps = 40_000  # fewer steps needed at coarser grid (larger DT)
         save_path = str(results_dir / "demux_density_fdtd.npy")
 
@@ -822,6 +830,18 @@ def main():
     print("  Gradient computed via JAX autodiff through lax.scan + jax.checkpoint")
     print("  Checkpoints save every 50 iterations")
 
+    if finetune:
+        opt_iters = 600
+        opt_lr = 0.001
+        opt_beta = "fixed"
+        opt_beta_val = 12.0
+        print(f"  FINETUNE: {opt_iters} iters, lr={opt_lr}, beta={opt_beta_val}")
+    else:
+        opt_iters = 600 if component == "demux" else 300
+        opt_lr = 0.02
+        opt_beta = "anneal"
+        opt_beta_val = 8.0
+
     optimized_density = optimize_density(
         initial_density=initial_density,
         n_bg=n_bg,
@@ -831,9 +851,10 @@ def main():
         target_freqs_hz=target_freqs_hz,
         n_steps=n_steps,
         source_x_cell=source_x_cell,
-        n_iterations=600 if component == "demux" else 300,
-        learning_rate=0.02,
-        beta_schedule="anneal",  # ramp beta 4→6→8→12 for foundry-ready binarization
+        n_iterations=opt_iters,
+        learning_rate=opt_lr,
+        beta_schedule=opt_beta,
+        beta_projection=opt_beta_val,
         save_path=save_path,
     )
 
