@@ -71,7 +71,7 @@ PML_CELLS  = 20      # PML thickness in cells
 PML_ORDER  = 3       # polynomial grading order (m=3)
 PML_R0     = 1e-8    # target reflection coefficient
 PML_KAPPA  = 1.0     # kappa_max (stretch factor, 1.0 = standard PML)
-PML_ALPHA  = 2e10    # alpha_max (CFS factor, helps late-time stability)
+PML_ALPHA  = 0.05    # alpha_max (CFS factor — MUST match optimizer value)
 
 # ============================================================================
 # FDTD Simulation Parameters
