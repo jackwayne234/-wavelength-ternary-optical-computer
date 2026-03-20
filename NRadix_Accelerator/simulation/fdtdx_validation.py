@@ -805,6 +805,7 @@ def compare_with_bpm(fdtd_results: dict, results_dir: Path) -> dict:
 # ============================================================================
 
 def main():
+    global DX, DY, DT
     import sys
     use_fdtd = "--fdtd" in sys.argv
 
@@ -875,7 +876,6 @@ def main():
     # ----- Validate demux -----
     # Switch to 120nm grid for FDTD-optimized demux
     if use_fdtd:
-        global DX, DY, DT
         DX = DY = 120e-9
         DT = CFL * DX / (C_LIGHT * math.sqrt(2.0))
         print(f"\n  Switched to 120nm grid for demux (matches FDTD optimizer)")
