@@ -88,6 +88,73 @@ Same fab process. Yield-based SKUs. More working cubes = higher compute tier.
 6. Inter-cube optical interface
 7. Layer-to-layer alignment precision
 
+## Late Session Breakthrough — Skip Optical Accumulation Entirely
+
+### The 2×2 Simplification
+
+CJ asked: for a 2×2 binary, do you even need the accumulation cube? With 2 lanes, each outputting to f₊ (product=+1) or f₋ (product=-1), there are only 4 possible port patterns:
+
+| Lane 1 | Lane 2 | Pattern | Answer |
+|--------|--------|---------|--------|
+| f₊ (top) | f₊ (top) | both top | +2 |
+| f₋ (bot) | f₋ (bot) | both bottom | -2 |
+| f₊ (top) | f₋ (bot) | mixed | 0 |
+| f₋ (bot) | f₊ (top) | mixed | 0 |
+
+No accumulation cube needed. Just detect which ports lit up. The PATTERN is the answer.
+
+### The Big Realization
+
+CJ: "we were just counting the ports the whole time."
+
+Every architecture we drew — the 81-port demux, the 3D routing cube, the ternary tree — they ALL ended with "which port lit up = the answer." The optical accumulation was a more complicated way of arriving at the same set of output ports. The lookup table is the same size no matter what.
+
+For binary {-1, +1}:
+- You don't need a lookup table at all
+- Just count how many f₊ ports lit up, how many f₋ lit up, subtract
+- That's a popcount — one of the simplest operations in electronics
+- A handful of transistors
+
+For ternary (future):
+- Each lane has 6 possible product ports
+- Count products in each category, weighted sum: 1×count₁ + 2×count₂ + 3×count₃ + 4×count₄ + 6×count₆ + 9×count₉
+- Still trivially simple electronics
+
+### Final Architecture (Simplest Version)
+
+```
+OPTICAL (the hard, valuable part):
+  N lanes of SFG/DFG → each lane outputs to one of 2 ports → multiplication done
+
+ELECTRONIC (the trivial part):
+  Count which ports lit up → subtract → answer
+```
+
+The optical chip does massively parallel multiplication at the speed of light at milliwatts. The electronic readout does grade school subtraction. Each domain does what it's best at.
+
+The accumulation cube is GONE. The 3D layered structure, the SFG/DFG interleaving for accumulation, the routing — all unnecessary for the proof of concept. The weighting chip + photodetectors + trivial counting = complete system.
+
+### Why This Is Valid
+
+- The multiplication is the hard, parallelizable, power-hungry part → optics handles it
+- The accumulation is trivially simple addition → a few transistors handle it
+- No intensity measurement — each port is binary (light/no light)
+- No frequency measurement at the output — just presence detection
+- Scales to any size: N lanes → 2N ports → popcount
+
+### CJ's Parting Words
+
+"We were just counting the ports the whole time. The lookup table was the same size no matter what."
+
+The optical accumulation was solving a problem that didn't need solving optically.
+
+## Next Steps (Updated)
+
+1. Start with 2×2 binary proof of concept — weighting chip only + 4 detectors
+2. Pick frequency assignments for binary {-1, +1} encoding
+3. Run full signal chain math for the simplest case
+4. Consider whether optical accumulation adds value at larger scales, or if electronic counting always wins
+
 ## Drawings
 
 - `drawings/IMG_0205_9x9_chip_layout.jpg` — CJ's hand drawing of the 9x9 chip layout
