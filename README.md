@@ -53,6 +53,57 @@ With 6-triplet WDM (Phase 2): ~438 TFLOPS at the same power — **~22 TFLOPS/W**
 
 ---
 
+## How the Math Becomes Hardware
+
+Understanding this project starts with one trit.
+
+### One Trit: 3 × 3 = 9 Combinations
+
+A single trit has three values: **-1, 0, +1**. Each is a different wavelength of light:
+
+```
+  Input A:  -1 (Red 1550nm)  |  0 (Green 1216nm)  |  +1 (Blue 1000nm)
+  Input B:  -1 (Red 1550nm)  |  0 (Green 1216nm)  |  +1 (Blue 1000nm)
+
+  3 × 3 = 9 possible input combinations
+```
+
+One SFG mixer takes two wavelengths in, produces one wavelength out. A 5-channel demux sorts the output to 5 detectors. **Exactly one detector fires** — that's your answer plus carry information.
+
+### 9 Trits: A "Nonad"
+
+Stack 9 of those single-trit ALUs together and connect the carry chain between them. Now you can add/subtract 9-trit numbers (range: ±9,841). Each ALU still does the same 3×3 job — the carry just ripples from one to the next.
+
+### 81 Trits: The Full Word
+
+Stack 81 single-trit ALUs in a 9×9 grid. That's the full processor word — equivalent to 128-bit binary. Carry ripples across all 81 positions in ~1.6 ns.
+
+```
+  1 trit   = 1 ALU             (3×3 truth table, 9 combinations)
+  9 trits  = 1 nonad = 9 ALUs  (one row of the grid)
+  81 trits = 9 nonads = 81 ALUs (the full 9×9 grid = one word)
+```
+
+### 81×81 Systolic Array: 6,561 PEs
+
+Now take that 81-trit processing element and tile 81 of them across and 81 down — a systolic array for matrix multiply. Data flows right, partial sums flow down, weights load per column.
+
+```
+  81 × 81 = 6,561 Processing Elements
+  Each PE: optical multiply (SFG) + electronic accumulate (SRAM)
+  ~4.0 TFLOPS equivalent at 617 MHz
+```
+
+### Architecture Decision (March 2026)
+
+**Optical domain:** SFG/DFG mixing (the multiply) + waveguide transport. This is where photons beat electrons.
+
+**Electronic domain:** SRAM registers, carry chain, control logic. Proven, cheap, fast. No optical RAM — transistors store, photons compute.
+
+For the full technical breakdown with diagrams, see [`study_cpu_phases_complete.md`](study_cpu_phases_complete.md) and [`nradix-cpu-architecture.html`](nradix-cpu-architecture.html).
+
+---
+
 ## Tape-Out Status
 
 The **9x9 monolithic chip** (1095 x 695 um, X-cut LiNbO3) is ready for foundry submission.
@@ -177,16 +228,22 @@ Weights are **streamed from optical RAM**, not stored per-PE. Each PE is just a 
 
 ---
 
-## CPU Phases (Legacy)
+## CPU Phases (Active Path)
 
-The [`CPU_Phases/`](CPU_Phases/) directory contains earlier prototyping work for a general-purpose optical CPU. This work is preserved but not the current focus.
+The [`CPU_Phases/`](CPU_Phases/) directory contains the general-purpose ternary optical CPU design — now the primary architecture. Includes a complete ISA simulator, OPU controller with GDS layouts, 3-tier register file, and 81×81 systolic array generator.
 
 | Phase | Description | Status |
 |-------|-------------|--------|
-| Phase 1 | Visible light RGB prototype (24"x24") | Parts ordered |
-| Phase 2 | 10GHz fiber benchtop | Planning |
-| Phase 3 | Silicon photonics chip | Seeking funding |
-| Phase 4 | DIY fab (contingency) | On demand |
+| Phase 1 | Visible light RGB prototype (24"x24") | Design complete |
+| Phase 2 | 10GHz fiber benchtop | Design |
+| Phase 3 | LiNbO₃ chip simulation | FDTD verified |
+| Phase 4 | DIY fab (contingency) | Backup |
+
+**Key files:**
+- [`study_cpu_phases_complete.md`](study_cpu_phases_complete.md) — Full architecture study
+- [`nradix-cpu-architecture.html`](nradix-cpu-architecture.html) — Visual reference (8 diagrams)
+- [`CPU_Phases/cpu_architecture/ternary_isa_simulator.py`](CPU_Phases/cpu_architecture/ternary_isa_simulator.py) — 27-instruction ISA simulator
+- [`CPU_Phases/cpu_architecture/opu_controller.py`](CPU_Phases/cpu_architecture/opu_controller.py) — OPU controller GDS generator
 
 ---
 
