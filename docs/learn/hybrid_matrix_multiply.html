@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>How the NRadix Hybrid Optical Matrix Multiplier Works</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0a0a1a;
+  --bg2: #0e0e26;
+  --bg3: #161640;
+  --cyan: #00e5ff;
+  --cyan-dim: #00899a;
+  --blue: #4488ff;
+  --blue-dim: #2a5ab8;
+  --amber: #ffb300;
+  --amber-dim: #b37e00;
+  --green: #00e676;
+  --green-dim: #00a050;
+  --white: #eaeaf4;
+  --gray: #7c7c96;
+  --text: #b8b8d0;
+  --glow-cyan: 0 0 14px rgba(0,229,255,0.45);
+  --glow-amber: 0 0 14px rgba(255,179,0,0.45);
+  --glow-green: 0 0 14px rgba(0,230,118,0.45);
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, Oxygen, sans-serif;
+  line-height: 1.65;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+.container {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 48px 28px 100px;
+}
+
+header {
+  text-align: center;
+  margin-bottom: 52px;
+  padding-bottom: 36px;
+  border-bottom: 1px solid rgba(0,229,255,0.12);
+}
+header h1 {
+  font-size: 2.1rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.4px;
+  margin-bottom: 10px;
+}
+header .subtitle {
+  font-size: 1.05rem;
+  color: var(--cyan-dim);
+  font-weight: 400;
+  font-style: italic;
+}
+
+/* Tabs */
+.section-nav { display: flex; justify-content: center; gap: 10px; margin-bottom: 44px; flex-wrap: wrap; }
+.section-tab {
+  padding: 10px 22px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  background: var(--bg2);
+  color: var(--gray);
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-family: inherit;
+}
+.section-tab:hover { border-color: rgba(0,229,255,0.25); color: var(--white); }
+.section-tab.active {
+  background: rgba(0,229,255,0.08);
+  border-color: var(--cyan);
+  color: var(--cyan);
+  box-shadow: var(--glow-cyan);
+}
+.tab-num {
+  display: inline-block;
+  width: 22px; height: 22px;
+  line-height: 22px;
+  text-align: center;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.06);
+  font-size: 0.72rem;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+.section-tab.active .tab-num { background: var(--cyan); color: var(--bg); font-weight: 700; }
+
+/* Sections */
+.section { display: none; }
+.section.active { display: block; }
+.section-title { font-size: 1.45rem; font-weight: 600; color: #fff; margin-bottom: 6px; }
+.section-desc { color: var(--gray); margin-bottom: 28px; max-width: 720px; font-size: 0.93rem; }
+
+/* Controls */
+.step-controls { display: flex; align-items: center; gap: 10px; margin-bottom: 28px; flex-wrap: wrap; }
+.btn {
+  padding: 9px 20px;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px;
+  background: var(--bg2);
+  color: var(--white);
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: all 0.25s;
+  font-family: inherit;
+  user-select: none;
+}
+.btn:hover { background: var(--bg3); border-color: rgba(255,255,255,0.25); }
+.btn:disabled { opacity: 0.25; cursor: default; pointer-events: none; }
+.btn.primary { background: rgba(0,229,255,0.12); border-color: var(--cyan); color: var(--cyan); }
+.btn.primary:hover { background: rgba(0,229,255,0.22); }
+.step-indicator { font-size: 0.82rem; color: var(--gray); margin-left: 6px; }
+
+/* SVG box */
+.viz-container {
+  background: var(--bg2);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+.viz-container svg { width: 100%; height: auto; display: block; }
+svg text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, sans-serif; }
+
+/* Annotations */
+.annotation {
+  background: var(--bg3);
+  border-radius: 12px;
+  padding: 18px 22px;
+  margin-top: 20px;
+  border-left: 3px solid var(--cyan);
+  font-size: 0.9rem;
+  line-height: 1.75;
+}
+.annotation.amber { border-left-color: var(--amber); }
+.annotation.green { border-left-color: var(--green); }
+.annotation strong { color: #fff; }
+.label {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+.label.opt { background: rgba(0,229,255,0.13); color: var(--cyan); }
+.label.elec { background: rgba(0,230,118,0.13); color: var(--green); }
+.label.conv { background: rgba(255,179,0,0.13); color: var(--amber); }
+
+/* Callout */
+.callout {
+  background: linear-gradient(135deg, rgba(0,229,255,0.06), rgba(0,230,118,0.06));
+  border: 1px solid rgba(0,229,255,0.18);
+  border-radius: 12px;
+  padding: 24px 28px;
+  margin-top: 28px;
+  font-size: 0.93rem;
+  line-height: 1.85;
+}
+.callout-title { font-weight: 700; color: #fff; font-size: 1rem; margin-bottom: 6px; }
+
+/* Legend */
+.legend { display: flex; gap: 22px; flex-wrap: wrap; margin-bottom: 20px; }
+.legend-item { display: flex; align-items: center; gap: 7px; font-size: 0.8rem; color: var(--gray); }
+.legend-dot { width: 11px; height: 11px; border-radius: 50%; }
+.legend-dot.opt { background: var(--cyan); box-shadow: var(--glow-cyan); }
+.legend-dot.conv { background: var(--amber); box-shadow: var(--glow-amber); }
+.legend-dot.elec { background: var(--green); box-shadow: var(--glow-green); }
+
+/* Clickable cells */
+.cell-click { cursor: pointer; }
+.cell-click:hover rect { filter: brightness(1.4); }
+
+@keyframes dashFlow {
+  to { stroke-dashoffset: -20; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <h1>How the NRadix Hybrid Optical Matrix Multiplier Works</h1>
+  <p class="subtitle">Optical multiply. Electronic accumulate. Same math, less power.</p>
+</header>
+
+<nav class="section-nav">
+  <button class="section-tab active" onclick="goSec(0)"><span class="tab-num">1</span>The Dot Product</button>
+  <button class="section-tab" onclick="goSec(1)"><span class="tab-num">2</span>3x3 Matrix Multiply</button>
+  <button class="section-tab" onclick="goSec(2)"><span class="tab-num">3</span>The Hybrid Chip</button>
+</nav>
+
+<!-- ======================== SECTION 0 ======================== -->
+<div class="section active" id="sec0">
+  <h2 class="section-title">The Dot Product</h2>
+  <p class="section-desc">A dot product multiplies pairs of numbers in parallel, then sums the results. This single operation is the atom of every matrix multiply.</p>
+  <div class="step-controls">
+    <button class="btn" id="s0-prev" onclick="s0Prev()" disabled>Previous</button>
+    <button class="btn primary" id="s0-next" onclick="s0Next()">Next Step</button>
+    <button class="btn" id="s0-auto" onclick="s0Auto()">Auto Play</button>
+    <span class="step-indicator" id="s0-ind">Step 1 / 4</span>
+  </div>
+  <div class="viz-container">
+    <svg id="svg0" viewBox="0 0 880 340">
+      <defs>
+        <filter id="gc"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        <filter id="gg"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      </defs>
+
+      <!-- Vector A -->
+      <g id="s0g-va" opacity="0">
+        <text x="60" y="28" fill="#fff" font-size="13" font-weight="600" text-anchor="middle">Input A</text>
+        <rect x="20" y="56" width="80" height="46" rx="7" fill="rgba(0,229,255,0.1)" stroke="#00e5ff" stroke-width="1.3"/>
+        <text x="60" y="86" fill="#00e5ff" font-size="21" font-weight="700" text-anchor="middle">2</text>
+        <rect x="20" y="120" width="80" height="46" rx="7" fill="rgba(0,229,255,0.1)" stroke="#00e5ff" stroke-width="1.3"/>
+        <text x="60" y="150" fill="#00e5ff" font-size="21" font-weight="700" text-anchor="middle">5</text>
+        <rect x="20" y="184" width="80" height="46" rx="7" fill="rgba(0,229,255,0.1)" stroke="#00e5ff" stroke-width="1.3"/>
+        <text x="60" y="214" fill="#00e5ff" font-size="21" font-weight="700" text-anchor="middle">3</text>
+      </g>
+
+      <!-- Multiply symbols -->
+      <g id="s0g-x" opacity="0">
+        <text x="128" y="86" fill="#555" font-size="18" text-anchor="middle">x</text>
+        <text x="128" y="150" fill="#555" font-size="18" text-anchor="middle">x</text>
+        <text x="128" y="214" fill="#555" font-size="18" text-anchor="middle">x</text>
+      </g>
+
+      <!-- Vector W -->
+      <g id="s0g-vw" opacity="0">
+        <text x="196" y="28" fill="#fff" font-size="13" font-weight="600" text-anchor="middle">Weight W</text>
+        <rect x="156" y="56" width="80" height="46" rx="7" fill="rgba(255,179,0,0.1)" stroke="#ffb300" stroke-width="1.3"/>
+        <text x="196" y="86" fill="#ffb300" font-size="21" font-weight="700" text-anchor="middle">4</text>
+        <rect x="156" y="120" width="80" height="46" rx="7" fill="rgba(255,179,0,0.1)" stroke="#ffb300" stroke-width="1.3"/>
+        <text x="196" y="150" fill="#ffb300" font-size="21" font-weight="700" text-anchor="middle">1</text>
+        <rect x="156" y="184" width="80" height="46" rx="7" fill="rgba(255,179,0,0.1)" stroke="#ffb300" stroke-width="1.3"/>
+        <text x="196" y="214" fill="#ffb300" font-size="21" font-weight="700" text-anchor="middle">6</text>
+      </g>
+
+      <!-- Arrows -->
+      <g id="s0g-arr" opacity="0">
+        <line x1="236" y1="79" x2="310" y2="79" stroke="#444" stroke-width="1.2" stroke-dasharray="5,4"/>
+        <line x1="236" y1="143" x2="310" y2="143" stroke="#444" stroke-width="1.2" stroke-dasharray="5,4"/>
+        <line x1="236" y1="207" x2="310" y2="207" stroke="#444" stroke-width="1.2" stroke-dasharray="5,4"/>
+      </g>
+
+      <!-- Parallel multiply -->
+      <g id="s0g-prod" opacity="0">
+        <text x="410" y="30" fill="#00e5ff" font-size="12" font-weight="700" text-anchor="middle" filter="url(#gc)">MULTIPLY (parallel)</text>
+        <rect x="316" y="56" width="188" height="46" rx="7" fill="rgba(0,229,255,0.06)" stroke="#00e5ff" stroke-width="1.3"/>
+        <text x="410" y="85" fill="#fff" font-size="16" text-anchor="middle">2 x 4 = <tspan font-weight="700" fill="#00e5ff">8</tspan></text>
+        <rect x="316" y="120" width="188" height="46" rx="7" fill="rgba(0,229,255,0.06)" stroke="#00e5ff" stroke-width="1.3"/>
+        <text x="410" y="149" fill="#fff" font-size="16" text-anchor="middle">5 x 1 = <tspan font-weight="700" fill="#00e5ff">5</tspan></text>
+        <rect x="316" y="184" width="188" height="46" rx="7" fill="rgba(0,229,255,0.06)" stroke="#00e5ff" stroke-width="1.3"/>
+        <text x="410" y="213" fill="#fff" font-size="16" text-anchor="middle">3 x 6 = <tspan font-weight="700" fill="#00e5ff">18</tspan></text>
+        <!-- Simultaneous bar -->
+        <rect x="516" y="54" width="3" height="180" rx="1.5" fill="#00e5ff" opacity="0.45"/>
+        <text x="530" y="130" fill="#00e5ff" font-size="10" opacity="0.7">all 3</text>
+        <text x="530" y="144" fill="#00e5ff" font-size="10" opacity="0.7">at once</text>
+      </g>
+
+      <!-- Converge arrows -->
+      <g id="s0g-conv" opacity="0">
+        <line x1="504" y1="79" x2="600" y2="140" stroke="#00e676" stroke-width="1.3" stroke-dasharray="5,4"/>
+        <line x1="504" y1="143" x2="600" y2="148" stroke="#00e676" stroke-width="1.3" stroke-dasharray="5,4"/>
+        <line x1="504" y1="207" x2="600" y2="156" stroke="#00e676" stroke-width="1.3" stroke-dasharray="5,4"/>
+      </g>
+
+      <!-- Accumulate -->
+      <g id="s0g-acc" opacity="0">
+        <text x="700" y="110" fill="#00e676" font-size="12" font-weight="700" text-anchor="middle" filter="url(#gg)">ACCUMULATE (sum)</text>
+        <rect x="610" y="126" width="180" height="46" rx="7" fill="rgba(0,230,118,0.06)" stroke="#00e676" stroke-width="1.3"/>
+        <text x="700" y="155" fill="#fff" font-size="15" text-anchor="middle">8 + 5 + 18 = <tspan font-weight="700" fill="#00e676">31</tspan></text>
+      </g>
+
+      <!-- Result pill -->
+      <g id="s0g-res" opacity="0">
+        <rect x="630" y="196" width="140" height="42" rx="21" fill="rgba(0,230,118,0.12)" stroke="#00e676" stroke-width="2"/>
+        <text x="700" y="223" fill="#00e676" font-size="19" font-weight="700" text-anchor="middle" filter="url(#gg)">Result: 31</text>
+        <text x="700" y="264" fill="#666" font-size="11" text-anchor="middle">One dot product = one output number</text>
+      </g>
+    </svg>
+  </div>
+  <div class="annotation" id="s0-ann"></div>
+</div>
+
+<!-- ======================== SECTION 1 ======================== -->
+<div class="section" id="sec1">
+  <h2 class="section-title">Full 3x3 Matrix Multiply</h2>
+  <p class="section-desc">A matrix multiply is many dot products. A 3x3 output has 9 cells -- each one is a dot product between a row of A and a column of B. Click any output cell to see the breakdown.</p>
+  <div class="step-controls">
+    <button class="btn" id="s1-prev" onclick="s1Prev()" disabled>Previous</button>
+    <button class="btn primary" id="s1-next" onclick="s1Next()">Next Step</button>
+    <button class="btn" id="s1-auto" onclick="s1Auto()">Auto Play</button>
+    <span class="step-indicator" id="s1-ind">Step 1 / 3</span>
+  </div>
+  <div class="viz-container">
+    <svg id="svg1" viewBox="0 0 880 440"></svg>
+  </div>
+  <div class="annotation" id="s1-ann"></div>
+</div>
+
+<!-- ======================== SECTION 2 ======================== -->
+<div class="section" id="sec2">
+  <h2 class="section-title">The Hybrid Optical-Electronic Chip</h2>
+  <p class="section-desc">The NRadix chip splits matrix multiplication across two physical domains: light handles the multiplications (all at once), electronics handles the additions.</p>
+  <div class="step-controls">
+    <button class="btn" id="s2-prev" onclick="s2Prev()" disabled>Previous</button>
+    <button class="btn primary" id="s2-next" onclick="s2Next()">Next Step</button>
+    <button class="btn" id="s2-auto" onclick="s2Auto()">Auto Play</button>
+    <span class="step-indicator" id="s2-ind">Step 1 / 5</span>
+  </div>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot opt"></div>Optical domain</div>
+    <div class="legend-item"><div class="legend-dot conv"></div>Opto-electronic boundary</div>
+    <div class="legend-item"><div class="legend-dot elec"></div>Electronic domain</div>
+  </div>
+  <div class="viz-container">
+    <svg id="svg2" viewBox="0 0 980 580"></svg>
+  </div>
+  <div class="annotation" id="s2-ann"></div>
+  <div class="callout" id="s2-callout" style="display:none">
+    <div class="callout-title">Why This Matters</div>
+    The optical chip does the <strong>MULTIPLY</strong> -- the expensive part -- all N<sup>2</sup> multiplications happen at the speed of light, simultaneously, in a single clock cycle. Electronics does the <strong>ACCUMULATE</strong> -- the cheap part -- simple addition in adder trees.<br><br>
+    The result: <strong>same throughput as a TPU, at a fraction of the power.</strong> Light does not dissipate heat the way transistor switching does, so the most power-hungry operation (multiply) becomes nearly free.
+  </div>
+</div>
+
+</div><!-- /container -->
+
+<script>
+// ============ Section navigation ============
+let curSec = 0;
+function goSec(i) {
+  curSec = i;
+  document.querySelectorAll('.section').forEach((s,k) => s.classList.toggle('active', k===i));
+  document.querySelectorAll('.section-tab').forEach((t,k) => t.classList.toggle('active', k===i));
+  if (i===1 && !s1Ready) buildS1();
+  if (i===2 && !s2Ready) buildS2();
+}
+
+// ============ Helpers ============
+function fade(id, on) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.style.transition = 'opacity 0.55s ease';
+  el.style.opacity = on ? 1 : 0;
+}
+
+// ============ SECTION 0: Dot Product ============
+let s0 = 0;
+const s0Max = 3;
+const s0Groups = [
+  ['s0g-va','s0g-x','s0g-vw'],        // step 0: show inputs
+  ['s0g-arr','s0g-prod'],              // step 1: multiply
+  ['s0g-conv','s0g-acc'],              // step 2: accumulate
+  ['s0g-res'],                         // step 3: result
+];
+const s0Ann = [
+  '<strong>Step 1:</strong> We start with two vectors of the same length. Input <span style="color:#00e5ff">A = [2, 5, 3]</span> holds the data. Weight <span style="color:#ffb300">W = [4, 1, 6]</span> holds the learned parameters.',
+  '<strong>Step 2:</strong> Each pair is multiplied <em>in parallel</em> -- all three multiplications happen at the same time. This is where the real computational work is.',
+  '<strong>Step 3:</strong> The three products are summed into a single number. This accumulation step is computationally cheap compared to the multiply.',
+  '<strong>Step 4:</strong> The result -- <span style="color:#00e676;font-weight:700">31</span> -- is a single element of the output matrix. A full matrix multiply repeats this for every row-column pair.',
+];
+
+function s0Render() {
+  // Turn on all groups up to current step
+  const allIds = s0Groups.flat();
+  const onIds = new Set();
+  for (let i = 0; i <= s0; i++) s0Groups[i].forEach(id => onIds.add(id));
+  allIds.forEach(id => fade(id, onIds.has(id)));
+  document.getElementById('s0-ann').innerHTML = s0Ann[s0];
+  document.getElementById('s0-ind').textContent = `Step ${s0+1} / ${s0Max+1}`;
+  document.getElementById('s0-prev').disabled = s0===0;
+  document.getElementById('s0-next').disabled = s0===s0Max;
+}
+function s0Next() { if(s0<s0Max){s0++;s0Render();} }
+function s0Prev() { if(s0>0){s0--;s0Render();} }
+function s0Auto() { s0=0;s0Render(); let n=0; const iv=setInterval(()=>{n++;if(n>s0Max){clearInterval(iv);return;}s0=n;s0Render();},1300); }
+setTimeout(s0Render, 80);
+
+// ============ SECTION 1: 3x3 Matrix Multiply ============
+let s1Ready = false, s1 = 0;
+const s1Max = 2;
+const MA = [[1,2,3],[4,5,6],[7,8,9]];
+const MB = [[9,8,7],[6,5,4],[3,2,1]];
+const MC = [[],[],[]];
+for(let i=0;i<3;i++) for(let j=0;j<3;j++){MC[i][j]=0;for(let k=0;k<3;k++) MC[i][j]+=MA[i][k]*MB[k][j];}
+
+function buildS1() {
+  s1Ready = true;
+  const svg = document.getElementById('svg1');
+  const cs=54, g=5;
+  let h='';
+
+  // Matrix A
+  const ax=40,ay=90;
+  h+=`<text x="${ax+82}" y="${ay-14}" fill="#fff" font-size="14" font-weight="600" text-anchor="middle">Matrix A</text>`;
+  for(let i=0;i<3;i++) for(let j=0;j<3;j++){
+    const x=ax+j*(cs+g), y=ay+i*(cs+g);
+    h+=`<rect id="a${i}${j}" x="${x}" y="${y}" width="${cs}" height="${cs}" rx="6" fill="rgba(0,229,255,0.08)" stroke="#00e5ff" stroke-width="1"/>`;
+    h+=`<text x="${x+cs/2}" y="${y+cs/2+6}" fill="#00e5ff" font-size="17" font-weight="600" text-anchor="middle">${MA[i][j]}</text>`;
+  }
+
+  h+=`<text x="240" y="${ay+90}" fill="#444" font-size="26" text-anchor="middle" font-weight="300">x</text>`;
+
+  // Matrix B
+  const bx=274,by=90;
+  h+=`<text x="${bx+82}" y="${by-14}" fill="#fff" font-size="14" font-weight="600" text-anchor="middle">Matrix B</text>`;
+  for(let i=0;i<3;i++) for(let j=0;j<3;j++){
+    const x=bx+j*(cs+g), y=by+i*(cs+g);
+    h+=`<rect id="b${i}${j}" x="${x}" y="${y}" width="${cs}" height="${cs}" rx="6" fill="rgba(255,179,0,0.08)" stroke="#ffb300" stroke-width="1"/>`;
+    h+=`<text x="${x+cs/2}" y="${y+cs/2+6}" fill="#ffb300" font-size="17" font-weight="600" text-anchor="middle">${MB[i][j]}</text>`;
+  }
+
+  h+=`<text x="478" y="${ay+90}" fill="#444" font-size="26" text-anchor="middle" font-weight="300">=</text>`;
+
+  // Matrix C
+  const cx=508,cy=90;
+  h+=`<text x="${cx+82}" y="${cy-14}" fill="#fff" font-size="14" font-weight="600" text-anchor="middle">Matrix C (result)</text>`;
+  for(let i=0;i<3;i++) for(let j=0;j<3;j++){
+    const x=cx+j*(cs+g), y=cy+i*(cs+g);
+    h+=`<g class="cell-click" onclick="s1Click(${i},${j})">`;
+    h+=`<rect id="c${i}${j}" x="${x}" y="${y}" width="${cs}" height="${cs}" rx="6" fill="rgba(0,230,118,0.06)" stroke="#00e676" stroke-width="1"/>`;
+    h+=`<text id="ct${i}${j}" x="${x+cs/2}" y="${y+cs/2+6}" fill="#00e676" font-size="17" font-weight="600" text-anchor="middle">${MC[i][j]}</text>`;
+    h+=`</g>`;
+  }
+
+  // Breakdown area
+  h+=`<g id="s1-bd" opacity="0">`;
+  h+=`<rect x="40" y="290" width="620" height="130" rx="12" fill="rgba(0,230,118,0.04)" stroke="rgba(0,230,118,0.15)" stroke-width="1"/>`;
+  h+=`<text id="bd-t1" x="350" y="324" fill="#fff" font-size="14" font-weight="600" text-anchor="middle"></text>`;
+  h+=`<text id="bd-t2" x="350" y="356" fill="#999" font-size="13" text-anchor="middle"></text>`;
+  h+=`<text id="bd-t3" x="350" y="390" fill="#00e676" font-size="17" font-weight="700" text-anchor="middle"></text>`;
+  h+=`</g>`;
+
+  // Highlights overlay
+  h+=`<g id="s1-hl"></g>`;
+
+  svg.innerHTML = h;
+  s1Render();
+}
+
+function s1Click(r,c) {
+  if(s1<2) return;
+  const hl = document.getElementById('s1-hl');
+  let hh = '';
+  const cs=54,g=5,ax=40,ay=90,bx=274,by=90,cx2=508,cy2=90;
+  // highlight row of A
+  for(let j=0;j<3;j++){const x=ax+j*(cs+g),y=ay+r*(cs+g);hh+=`<rect x="${x}" y="${y}" width="${cs}" height="${cs}" rx="6" fill="rgba(0,229,255,0.15)" stroke="#fff" stroke-width="2.5"/>`;}
+  // highlight col of B
+  for(let i=0;i<3;i++){const x=bx+c*(cs+g),y=by+i*(cs+g);hh+=`<rect x="${x}" y="${y}" width="${cs}" height="${cs}" rx="6" fill="rgba(255,179,0,0.15)" stroke="#fff" stroke-width="2.5"/>`;}
+  // highlight output cell
+  const ox=cx2+c*(cs+g),oy=cy2+r*(cs+g);
+  hh+=`<rect x="${ox}" y="${oy}" width="${cs}" height="${cs}" rx="6" fill="rgba(0,230,118,0.2)" stroke="#fff" stroke-width="3"/>`;
+  hl.innerHTML = hh;
+
+  // Show breakdown
+  const bd = document.getElementById('s1-bd');
+  bd.style.transition='opacity 0.3s'; bd.style.opacity=1;
+  const parts=[];
+  for(let k=0;k<3;k++) parts.push(`${MA[r][k]} x ${MB[k][c]} = ${MA[r][k]*MB[k][c]}`);
+  document.getElementById('bd-t1').textContent = `C[${r}][${c}]  =  Row ${r} of A  dot  Column ${c} of B`;
+  document.getElementById('bd-t2').textContent = parts.join('     +     ');
+  document.getElementById('bd-t3').textContent = `= ${MC[r][c]}`;
+}
+
+const s1Ann = [
+  '<strong>Step 1:</strong> Two 3x3 matrices. Each element of C is a dot product between one row of A and one column of B.',
+  '<strong>Step 2:</strong> That yields <strong>9 dot products</strong>, each containing 3 parallel multiplies and 1 sum. Total: 27 multiplications, 9 accumulations.',
+  '<strong>Step 3:</strong> The result matrix is complete. <strong>Click any green cell</strong> to see exactly which row of A and column of B produced it.',
+];
+
+function s1Render(){
+  document.getElementById('s1-ann').innerHTML = s1Ann[s1];
+  document.getElementById('s1-ind').textContent = `Step ${s1+1} / ${s1Max+1}`;
+  document.getElementById('s1-prev').disabled = s1===0;
+  document.getElementById('s1-next').disabled = s1===s1Max;
+  for(let i=0;i<3;i++) for(let j=0;j<3;j++){
+    const r=document.getElementById(`c${i}${j}`), t=document.getElementById(`ct${i}${j}`);
+    if(s1<2){r.setAttribute('fill','rgba(0,230,118,0.03)');t.textContent='?';t.setAttribute('fill','#333');}
+    else{r.setAttribute('fill','rgba(0,230,118,0.06)');t.textContent=MC[i][j];t.setAttribute('fill','#00e676');}
+  }
+  if(s1<2){const bd=document.getElementById('s1-bd');if(bd)bd.style.opacity=0;const hl=document.getElementById('s1-hl');if(hl)hl.innerHTML='';}
+}
+function s1Next(){if(s1<s1Max){s1++;s1Render();}}
+function s1Prev(){if(s1>0){s1--;s1Render();}}
+function s1Auto(){s1=0;s1Render();let n=0;const iv=setInterval(()=>{n++;if(n>s1Max){clearInterval(iv);return;}s1=n;s1Render();},1600);}
+
+
+// ============ SECTION 2: Hybrid Chip ============
+let s2Ready = false, s2 = 0;
+const s2Max = 4;
+
+function buildS2() {
+  s2Ready = true;
+  const svg = document.getElementById('svg2');
+  let h = '';
+
+  h+=`<defs>
+    <filter id="fgc"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="fga"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="fgg"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>`;
+
+  const sz=72, gap=20, gx=210, gy=120;
+  const rowY = i => gy + i*(sz+gap) + sz/2;
+  const colX = j => gx + j*(sz+gap) + sz/2;
+
+  // === Layer 1: Input lasers (left) ===
+  h+=`<g id="s2g-in" opacity="0">`;
+  h+=`<text x="24" y="46" fill="#00e5ff" font-size="14" font-weight="700" filter="url(#fgc)">OPTICAL DOMAIN</text>`;
+  h+=`<text x="24" y="64" fill="#00899a" font-size="10">Input A encoded as laser wavelengths</text>`;
+  for(let i=0;i<3;i++){
+    const y=rowY(i);
+    h+=`<rect x="16" y="${y-20}" width="120" height="40" rx="8" fill="rgba(0,229,255,0.07)" stroke="#00e5ff" stroke-width="1.2"/>`;
+    h+=`<text x="76" y="${y-1}" fill="#00e5ff" font-size="11" font-weight="600" text-anchor="middle">A row ${i}: [${MA[i].join(', ')}]</text>`;
+    h+=`<text x="76" y="${y+13}" fill="#00899a" font-size="8" text-anchor="middle">3 wavelengths</text>`;
+    // Animated beams to SFG grid
+    for(let j=0;j<3;j++){
+      const tx=gx+j*(sz+gap);
+      h+=`<line x1="136" y1="${y}" x2="${tx}" y2="${y}" stroke="#00e5ff" stroke-width="2" opacity="0.35" stroke-dasharray="8,5"><animate attributeName="stroke-dashoffset" from="26" to="0" dur="1.2s" repeatCount="indefinite"/></line>`;
+    }
+  }
+  h+=`</g>`;
+
+  // === Layer 1b: Weight lasers (top) ===
+  h+=`<g id="s2g-wt" opacity="0">`;
+  h+=`<text x="${gx}" y="28" fill="#4488ff" font-size="13" font-weight="700">Weight B as laser wavelengths</text>`;
+  for(let j=0;j<3;j++){
+    const x=colX(j);
+    h+=`<rect x="${x-50}" y="42" width="100" height="36" rx="8" fill="rgba(68,136,255,0.06)" stroke="#4488ff" stroke-width="1.2"/>`;
+    h+=`<text x="${x}" y="58" fill="#4488ff" font-size="10" font-weight="600" text-anchor="middle">B col ${j}: [${MB[0][j]}, ${MB[1][j]}, ${MB[2][j]}]</text>`;
+    h+=`<text x="${x}" y="72" fill="#2a5ab8" font-size="8" text-anchor="middle">3 wavelengths</text>`;
+    for(let i=0;i<3;i++){
+      const ty=gy+i*(sz+gap);
+      h+=`<line x1="${x}" y1="78" x2="${x}" y2="${ty}" stroke="#4488ff" stroke-width="2" opacity="0.35" stroke-dasharray="8,5"><animate attributeName="stroke-dashoffset" from="26" to="0" dur="1.2s" repeatCount="indefinite"/></line>`;
+    }
+  }
+  h+=`</g>`;
+
+  // === Layer 2: SFG Grid ===
+  h+=`<g id="s2g-sfg" opacity="0">`;
+  for(let i=0;i<3;i++) for(let j=0;j<3;j++){
+    const x=gx+j*(sz+gap), y=gy+i*(sz+gap);
+    // Each SFG[i][j] computes A[i][j]*B[j][?] -- in this grid layout,
+    // SFG at row i, col j receives A_row_i's j-th wavelength and B_col_?'s j-th wavelength.
+    // For a dot product for output C[i][c], the j-th SFG in that row computes A[i][j]*B[j][c].
+    // We show the product for c=j to keep it concrete (diagonal):
+    const prod = MA[i][j] * MB[j][j];
+    h+=`<rect x="${x}" y="${y}" width="${sz}" height="${sz}" rx="10" fill="rgba(0,229,255,0.05)" stroke="#00e5ff" stroke-width="1.5"/>`;
+    h+=`<text x="${x+sz/2}" y="${y+18}" fill="#00e5ff" font-size="10" font-weight="700" text-anchor="middle">SFG</text>`;
+    h+=`<text x="${x+sz/2}" y="${y+35}" fill="#aab" font-size="9" text-anchor="middle">${MA[i][j]} x ${MB[j][j]}</text>`;
+    h+=`<text x="${x+sz/2}" y="${y+52}" fill="#00e5ff" font-size="13" font-weight="700" text-anchor="middle">= ${prod}</text>`;
+    // Light flash circle
+    h+=`<circle cx="${x+sz/2}" cy="${y+sz/2}" r="${sz/2-2}" fill="none" stroke="#00e5ff" stroke-width="0.5" opacity="0.2"/>`;
+  }
+  h+=`<text x="${gx + (sz+gap)*1.5 - gap/2}" y="${gy + 3*(sz+gap)+8}" fill="#00e5ff" font-size="11" font-weight="700" text-anchor="middle" filter="url(#fgc)">All 9 SFG units fire SIMULTANEOUSLY -- N squared multiplies in one cycle</text>`;
+  h+=`</g>`;
+
+  // === Layer 3: Photodetectors ===
+  const pdX0 = gx + 3*(sz+gap) + 24;
+  h+=`<g id="s2g-pd" opacity="0">`;
+  // Vertical boundary line
+  h+=`<line x1="${pdX0-12}" y1="${gy-10}" x2="${pdX0-12}" y2="${gy+3*(sz+gap)-gap+10}" stroke="#ffb300" stroke-width="1" opacity="0.3" stroke-dasharray="6,4"/>`;
+  h+=`<text x="${pdX0+40}" y="${gy-22}" fill="#ffb300" font-size="12" font-weight="700" filter="url(#fga)">OPTO-ELECTRONIC BOUNDARY</text>`;
+  h+=`<text x="${pdX0+40}" y="${gy-8}" fill="#b37e00" font-size="9">Photodetectors convert light to electrical signal</text>`;
+
+  for(let i=0;i<3;i++){
+    for(let j=0;j<3;j++){
+      const sfgRightX = gx + j*(sz+gap) + sz;
+      const sfgCY = gy + i*(sz+gap) + sz/2;
+      const pdx = pdX0 + j*36;
+      const pdy = gy + i*(sz+gap) + 10 + j*18;
+
+      h+=`<line x1="${sfgRightX}" y1="${sfgCY}" x2="${pdx}" y2="${pdy+9}" stroke="#ffb300" stroke-width="1.2" opacity="0.4" stroke-dasharray="4,3"/>`;
+      h+=`<rect x="${pdx}" y="${pdy}" width="30" height="18" rx="4" fill="rgba(255,179,0,0.1)" stroke="#ffb300" stroke-width="1"/>`;
+      h+=`<text x="${pdx+15}" y="${pdy+13}" fill="#ffb300" font-size="7" text-anchor="middle" font-weight="700">PD</text>`;
+    }
+  }
+  h+=`</g>`;
+
+  // === Layer 4: Adder trees ===
+  const adX0 = pdX0 + 130;
+  h+=`<g id="s2g-add" opacity="0">`;
+  h+=`<text x="${adX0+20}" y="${gy-22}" fill="#00e676" font-size="12" font-weight="700" filter="url(#fgg)">ELECTRONIC DOMAIN</text>`;
+  h+=`<text x="${adX0+20}" y="${gy-8}" fill="#00a050" font-size="9">Adder trees: sum 3 products per output row</text>`;
+
+  for(let i=0;i<3;i++){
+    const treeY = rowY(i);
+    // Lines from PD to adder
+    for(let j=0;j<3;j++){
+      const pdRX = pdX0 + j*36 + 30;
+      const pdCY = gy + i*(sz+gap) + 10 + j*18 + 9;
+      h+=`<line x1="${pdRX}" y1="${pdCY}" x2="${adX0}" y2="${treeY}" stroke="#00e676" stroke-width="1.2" opacity="0.4" stroke-dasharray="4,3"/>`;
+    }
+
+    // Triangle adder
+    const tw=56, th=28;
+    h+=`<polygon points="${adX0},${treeY-th} ${adX0},${treeY+th} ${adX0+tw},${treeY}" fill="rgba(0,230,118,0.06)" stroke="#00e676" stroke-width="1.5"/>`;
+    h+=`<text x="${adX0+18}" y="${treeY+1}" fill="#00e676" font-size="9" font-weight="700">SUM</text>`;
+    h+=`<text x="${adX0+18}" y="${treeY+12}" fill="#00a050" font-size="7">3 terms</text>`;
+
+    // Arrow out
+    h+=`<line x1="${adX0+tw}" y1="${treeY}" x2="${adX0+tw+30}" y2="${treeY}" stroke="#00e676" stroke-width="2"/>`;
+    h+=`<polygon points="${adX0+tw+26},${treeY-4} ${adX0+tw+34},${treeY} ${adX0+tw+26},${treeY+4}" fill="#00e676"/>`;
+
+    // Result box
+    const rx0 = adX0+tw+38;
+    h+=`<rect x="${rx0}" y="${treeY-18}" width="100" height="36" rx="10" fill="rgba(0,230,118,0.1)" stroke="#00e676" stroke-width="2"/>`;
+    // Show actual dot product results for row i
+    const rowResult = MC[i]; // [C[i][0], C[i][1], C[i][2]]
+    h+=`<text x="${rx0+50}" y="${treeY-2}" fill="#fff" font-size="10" text-anchor="middle">Row ${i} of C</text>`;
+    h+=`<text x="${rx0+50}" y="${treeY+14}" fill="#00e676" font-size="12" font-weight="700" text-anchor="middle">[${rowResult.join(', ')}]</text>`;
+  }
+  h+=`<text x="${adX0+30}" y="${gy+3*(sz+gap)+8}" fill="#00e676" font-size="10" font-weight="600" text-anchor="middle">3 adder trees run in parallel</text>`;
+  h+=`</g>`;
+
+  svg.innerHTML = h;
+  s2Render();
+}
+
+const s2Ann = [
+  '<strong>Step 1:</strong> <span class="label opt">Optical</span> Input values from matrix A arrive from the left, encoded as laser wavelengths. Each of the 3 rows carries 3 wavelengths -- one per element.',
+  '<strong>Step 2:</strong> <span class="label opt">Optical</span> Weight values from matrix B arrive from the top, also as wavelengths. Each column of B is a separate set of beams. The beams will intersect at the SFG grid.',
+  '<strong>Step 3:</strong> <span class="label opt">Optical</span> At each intersection, a <strong>Sum Frequency Generation (SFG)</strong> unit mixes two input beams. The output frequency IS the product of the two input values. All 9 SFG units fire simultaneously -- N<sup>2</sup> multiplications in a single clock cycle, at the speed of light.',
+  '<strong>Step 4:</strong> <span class="label conv">Boundary</span> Each SFG output hits a <strong>photodetector (PD)</strong> that converts the optical signal into an electrical current. This is where light becomes electricity -- the opto-electronic boundary.',
+  '<strong>Step 5:</strong> <span class="label elec">Electronic</span> Simple <strong>adder trees</strong> sum the 3 products in each row to produce one dot product result. Three adder trees run in parallel (one per output row). Addition is cheap -- this is the easy part.',
+];
+
+function s2Render(){
+  const groups=['s2g-in','s2g-wt','s2g-sfg','s2g-pd','s2g-add'];
+  const vis=[
+    [1,0,0,0,0],
+    [1,1,0,0,0],
+    [1,1,1,0,0],
+    [1,1,1,1,0],
+    [1,1,1,1,1],
+  ];
+  vis[s2].forEach((v,i)=>fade(groups[i],!!v));
+  document.getElementById('s2-ann').innerHTML = s2Ann[s2];
+  document.getElementById('s2-ind').textContent = `Step ${s2+1} / ${s2Max+1}`;
+  document.getElementById('s2-prev').disabled = s2===0;
+  document.getElementById('s2-next').disabled = s2===s2Max;
+  document.getElementById('s2-callout').style.display = s2===s2Max?'block':'none';
+}
+function s2Next(){if(s2<s2Max){s2++;s2Render();}}
+function s2Prev(){if(s2>0){s2--;s2Render();}}
+function s2Auto(){s2=0;s2Render();let n=0;const iv=setInterval(()=>{n++;if(n>s2Max){clearInterval(iv);return;}s2=n;s2Render();},2000);}
+</script>
+</body>
+</html>

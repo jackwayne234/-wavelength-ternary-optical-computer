@@ -5,19 +5,38 @@
 [![License: Docs - CC BY 4.0](https://img.shields.io/badge/License-Docs%20CC%20BY%204.0-lightgrey.svg)](LICENSES/CC-BY-4.0.txt)
 [![License: Hardware - CERN OHL](https://img.shields.io/badge/License-Hardware%20CERN%20OHL-orange.svg)](LICENSES/CERN-OHL.txt)
 
-> **An optical AI accelerator using wavelength-division ternary logic**
+> **A hybrid optical-electronic AI accelerator using wavelength-division ternary logic**
 >
-> Monolithic photonic chip — passive optical compute at a fraction of the power of electronic GPUs.
+> Optical multiply (SFG, speed of light) + electronic accumulate — same throughput as electronic accelerators at a fraction of the power and heat.
+
+---
+
+## Architecture Pivot (March 2026)
+
+The original N-Radix design assumed fully optical multiply-accumulate (MAC) via waveguide superposition. In March 2026, we identified a fundamental flaw: **optical superposition loses information during accumulation** — you cannot distinguish "3+3" from "2+4" when optical signals combine. The individual products are destroyed in the sum.
+
+**Corrected architecture: hybrid optical-electronic matrix multiplier**
+
+1. **Optical multiply** — SFG units perform all N^2 multiplications simultaneously at the speed of light. This is the expensive operation, and it runs on milliwatts instead of watts.
+2. **Opto-electronic boundary** — Photodetectors convert optical products to electrical signals.
+3. **Electronic accumulate** — Adder trees sum the products per dot product. Proven, cheap, fast.
+
+**What this means for performance:**
+- **Same throughput** as electronic accelerators — the bottleneck is electronic accumulation and memory access, not the multiply
+- **Fraction of the power** — the multiply (most compute-intensive operation) is optical, consuming milliwatts instead of watts
+- **Less heat** — enables denser packing at data center scale
+
+The underlying physics (SFG, AWG routing, PPLN design) is unchanged and fully validated. The system architecture is corrected.
 
 ---
 
 ## What Is This?
 
-**N-Radix** is an optical AI accelerator optimized for parallel matrix operations — the same workloads that dominate AI training and inference. Instead of electrons through transistors, we use photons through waveguides on a monolithic lithium niobate (LiNbO3) chip.
+**N-Radix** is a hybrid optical-electronic AI accelerator optimized for parallel matrix operations — the same workloads that dominate AI training and inference. The multiply step uses photons through waveguides on lithium niobate (LiNbO3); the accumulate step uses conventional electronics.
 
 ### How It Works
 
-Each Processing Element (PE) uses **sum-frequency generation (SFG)** to mix two optical signals. The chip is entirely passive — no clock, no transistors, no software in the compute path. Light goes in one side, computed results come out the other.
+Each Processing Element (PE) uses **sum-frequency generation (SFG)** to mix two optical signals — performing the multiply optically at the speed of light. Photodetectors convert the optical products to electrical signals, and electronic adder trees handle the accumulation. The optical multiply is the compute-intensive step; the electronic accumulate is the cheap step.
 
 | Trit Value | Wavelength | Band |
 |------------|------------|------|
@@ -41,15 +60,17 @@ The glass never changes. Only the encoding does.
 
 **Power efficiency comparison (243x243 projected):**
 
+> **Note (March 2026):** These numbers are **under revision** for the hybrid architecture. The original projections assumed fully optical MAC operation. The optical multiply power savings are real, but total system power must account for photodetectors and electronic adder trees. Updated power analysis is in progress — see `docs/ADVANTAGE_ANALYSIS.md`.
+
 | Chip | Throughput | Power | Efficiency |
 |------|-----------|-------|------------|
-| N-Radix 243x243 | ~73 TFLOPS | ~20W | **3.6 TFLOPS/W** |
+| N-Radix 243x243 | ~73 TFLOPS | ~20W *(under revision)* | **3.6 TFLOPS/W** *(under revision)* |
 | NVIDIA H100 | ~990 TFLOPS (FP16) | 700W | 1.4 TFLOPS/W |
 | NVIDIA B200 | ~2,250 TFLOPS (FP16) | 1,000W | 2.3 TFLOPS/W |
 
-*N-Radix operations are single-trit balanced ternary, not FP16. Direct FLOPS comparison is apples-to-oranges — the advantage is power efficiency and architectural simplicity, not raw throughput vs mature GPUs.*
+*N-Radix operations are single-trit balanced ternary, not FP16. Direct FLOPS comparison is apples-to-oranges — the advantage is power efficiency at the multiply step, not raw throughput vs mature GPUs. Throughput is comparable; the win is power and heat.*
 
-With 6-triplet WDM (Phase 2): ~438 TFLOPS at the same power — **~22 TFLOPS/W** (~16x H100, ~10x B200 power efficiency).
+With 6-triplet WDM (Phase 2): ~438 TFLOPS at the same power — **~22 TFLOPS/W** *(under revision for hybrid architecture — multiply power savings are real, but total system power needs re-evaluation)*.
 
 ---
 
@@ -174,7 +195,7 @@ This unlocks:
 1. **Ternary's 1.58x information density** — each trit carries log₂(3) bits
 2. **Photonic parallelism** — wavelength-division multiplexing for 6x parallel channels
 3. **Log-domain multiplication** — multiply by adding exponents (hardware just adds)
-4. **Passive compute** — no clock, no transistors, no power in the optical path
+4. **Low-power optical multiply** — the compute-intensive multiply step runs on milliwatts, with electronic accumulation handling the cheap summation step
 
 ---
 
@@ -224,7 +245,13 @@ The chip is **monolithic** — one substrate with two regions:
 
 Photon arrival at each PE is synchronized by **matched waveguide path lengths** (validated: 0.000 ps spread). No clock distribution needed in the passive region — timing is geometry.
 
-Weights are **streamed from optical RAM**, not stored per-PE. Each PE is just a mixer + routing — simple, high-yield passive optics.
+Weights are **streamed from optical RAM**, not stored per-PE. Each PE is a mixer + routing (optical) with photodetection + accumulation (electronic).
+
+### SFG Chamber Design
+
+Each processing element contains a **chamber** of multiple PPLN waveguides — one per possible input pair. Both input frequencies broadcast into the chamber simultaneously; only the phase-matched waveguide fires, while all others are suppressed by 32-80 dB. No switching or routing logic is needed — physics selects the correct multiply.
+
+The physical hardware is **encoding-agnostic**: the same chamber supports balanced ternary {-1,0,+1}, unbalanced {1,2,3}, or binary {-1,+1} simply by choosing which laser frequencies to use. Encoding is a software/firmware decision; the chip is the same.
 
 ---
 
