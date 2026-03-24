@@ -1,6 +1,11 @@
 # Private — never push to GitHub
 war_room/
 
+# Claude/Blender tooling (local only)
+.claude/
+.blender-toolkit/
+.memsearch/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
