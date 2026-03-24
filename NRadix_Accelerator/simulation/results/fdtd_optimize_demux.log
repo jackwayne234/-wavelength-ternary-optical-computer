@@ -1,0 +1,76 @@
+NRadix FDTD Adjoint Inverse Design
+Grid: 333 x 800 cells  (dx=120.0 nm, dy=120.0 nm)
+Design region: 291 x 750 cells
+Target frequencies (19):
+  val=-9  192.3000 THz
+  val=-8  192.6000 THz
+  val=-7  192.9000 THz
+  val=-6  193.2000 THz
+  val=-5  193.5000 THz
+  val=-4  193.8000 THz
+  val=-3  194.1000 THz
+  val=-2  194.4000 THz
+  val=-1  194.7000 THz
+  val=+0  195.0000 THz
+  val=+1  195.3000 THz
+  val=+2  195.6000 THz
+  val=+3  195.9000 THz
+  val=+4  196.2000 THz
+  val=+5  196.5000 THz
+  val=+6  196.8000 THz
+  val=+7  197.1000 THz
+  val=+8  197.4000 THz
+  val=+9  197.7000 THz
+
+  WARNING: density shape (437, 1125) != design region (291, 750)
+  Resizing density to match design region...
+  Resized to: (291, 750)
+cuBLAS < 13.2 (120804 found) has a known issue where many kernels free TMEM buffers multiple times. Executing a cuBLAS kernel concurrently with another kernel (e.g. on another stream) can lead to silent data corruption.
+Starting FDTD adjoint optimization...
+  Initial density shape: (291, 750)
+  Grid: (333, 800)
+  n_steps per forward pass: 40000
+  Gradient computed via JAX autodiff through lax.scan + jax.checkpoint
+  Checkpoints save every 50 iterations
+/workspace/New-ternary-optical-computer/NRadix_Accelerator/simulation/fdtd_inverse_design.py:102: RuntimeWarning: invalid value encountered in divide
+  c = np.where(np.abs(denom) > 1e-30, sigma / denom * (b - 1.0), 0.0)
+  iter   10/300  loss=-0.1390  efficiency=13.9%  iter_time=3.1s  ETA=15min
+  iter   20/300  loss=-0.3954  efficiency=39.5%  iter_time=3.1s  ETA=15min
+  iter   30/300  loss=-0.4017  efficiency=40.2%  iter_time=3.1s  ETA=14min
+  iter   40/300  loss=-0.4305  efficiency=43.1%  iter_time=3.1s  ETA=14min
+  iter   50/300  loss=-0.5238  efficiency=52.4%  iter_time=3.1s  ETA=13min
+  Saved checkpoint: results/demux_density_fdtd.npy
+  iter   60/300  loss=-0.4798  efficiency=48.0%  iter_time=3.1s  ETA=13min
+  iter   70/300  loss=-0.4961  efficiency=49.6%  iter_time=3.1s  ETA=12min
+  iter   80/300  loss=-0.3290  efficiency=32.9%  iter_time=3.1s  ETA=11min
+  iter   90/300  loss=-0.4797  efficiency=48.0%  iter_time=3.1s  ETA=11min
+  iter  100/300  loss=-0.5220  efficiency=52.2%  iter_time=3.1s  ETA=10min
+  Saved checkpoint: results/demux_density_fdtd.npy
+  iter  110/300  loss=-0.4441  efficiency=44.4%  iter_time=3.1s  ETA=10min
+  iter  120/300  loss=-0.6387  efficiency=63.9%  iter_time=3.1s  ETA=9min
+  iter  130/300  loss=-0.5407  efficiency=54.1%  iter_time=3.1s  ETA=9min
+  iter  140/300  loss=-0.6815  efficiency=68.2%  iter_time=3.1s  ETA=8min
+  iter  150/300  loss=-0.1277  efficiency=12.8%  iter_time=3.1s  ETA=8min
+  Saved checkpoint: results/demux_density_fdtd.npy
+  iter  160/300  loss=-0.6765  efficiency=67.6%  iter_time=3.1s  ETA=7min
+  iter  170/300  loss=-0.0432  efficiency=4.3%  iter_time=3.1s  ETA=7min
+  iter  180/300  loss=-0.5599  efficiency=56.0%  iter_time=3.1s  ETA=6min
+  iter  190/300  loss=-0.3255  efficiency=32.6%  iter_time=3.1s  ETA=6min
+  iter  200/300  loss=-0.7428  efficiency=74.3%  iter_time=3.1s  ETA=5min
+  Saved checkpoint: results/demux_density_fdtd.npy
+  iter  210/300  loss=-0.5205  efficiency=52.1%  iter_time=3.1s  ETA=5min
+  iter  220/300  loss=-0.6559  efficiency=65.6%  iter_time=3.1s  ETA=4min
+  iter  230/300  loss=-0.4570  efficiency=45.7%  iter_time=3.1s  ETA=4min
+  iter  240/300  loss=-0.2907  efficiency=29.1%  iter_time=3.1s  ETA=3min
+  iter  250/300  loss=-0.6251  efficiency=62.5%  iter_time=3.1s  ETA=3min
+  Saved checkpoint: results/demux_density_fdtd.npy
+  iter  260/300  loss=-0.8182  efficiency=81.8%  iter_time=3.1s  ETA=2min
+  iter  270/300  loss=-0.9342  efficiency=93.4%  iter_time=3.1s  ETA=2min
+  iter  280/300  loss=-0.9788  efficiency=97.9%  iter_time=3.1s  ETA=1min
+  iter  290/300  loss=-0.9933  efficiency=99.3%  iter_time=3.1s  ETA=1min
+  iter  300/300  loss=-0.9980  efficiency=99.8%  iter_time=3.1s  ETA=0min
+  Saved checkpoint: results/demux_density_fdtd.npy
+  Final save: results/demux_density_fdtd.npy
+  Avg iter time (excluding JIT warmup): 3.125s
+Optimization complete. Saved to results/demux_density_fdtd.npy
+Run fdtdx_validation.py to validate.

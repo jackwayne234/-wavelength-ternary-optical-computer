@@ -1,0 +1,116 @@
+NRadix FDTD Adjoint Inverse Design
+Grid: 500 x 800 cells  (dx=120.0 nm, dy=120.0 nm)
+Design region: 458 x 750 cells
+Target frequencies (19):
+  val=-9  192.3000 THz
+  val=-8  192.6000 THz
+  val=-7  192.9000 THz
+  val=-6  193.2000 THz
+  val=-5  193.5000 THz
+  val=-4  193.8000 THz
+  val=-3  194.1000 THz
+  val=-2  194.4000 THz
+  val=-1  194.7000 THz
+  val=+0  195.0000 THz
+  val=+1  195.3000 THz
+  val=+2  195.6000 THz
+  val=+3  195.9000 THz
+  val=+4  196.2000 THz
+  val=+5  196.5000 THz
+  val=+6  196.8000 THz
+  val=+7  197.1000 THz
+  val=+8  197.4000 THz
+  val=+9  197.7000 THz
+
+  WARNING: density shape (437, 1125) != design region (458, 750)
+  Resizing density to match design region...
+  Resized to: (458, 750)
+cuBLAS < 13.2 (120804 found) has a known issue where many kernels free TMEM buffers multiple times. Executing a cuBLAS kernel concurrently with another kernel (e.g. on another stream) can lead to silent data corruption.
+Starting FDTD adjoint optimization...
+  Initial density shape: (458, 750)
+  Grid: (500, 800)
+  n_steps per forward pass: 40000
+  Gradient computed via JAX autodiff through lax.scan + jax.checkpoint
+  Checkpoints save every 50 iterations
+  Beta annealing: [4.0, 6.0, 8.0, 12.0], 150 iters per stage
+/workspace/New-ternary-optical-computer/NRadix_Accelerator/simulation/fdtd_inverse_design.py:102: RuntimeWarning: invalid value encountered in divide
+  c = np.where(np.abs(denom) > 1e-30, sigma / denom * (b - 1.0), 0.0)
+  iter   10/600  loss=-0.4955  efficiency=49.5%  iter_time=4.5s  ETA=44min
+  iter   20/600  loss=-0.8044  efficiency=80.4%  iter_time=4.5s  ETA=43min
+  iter   30/600  loss=-0.1570  efficiency=15.7%  iter_time=4.5s  ETA=43min
+  iter   40/600  loss=-0.7902  efficiency=79.0%  iter_time=4.5s  ETA=42min
+  iter   50/600  loss=-0.3116  efficiency=31.2%  iter_time=4.5s  ETA=41min
+  Saved checkpoint: results/demux_density_fdtd.npy
+  iter   60/600  loss=-0.7986  efficiency=79.9%  iter_time=4.5s  ETA=40min
+  iter   70/600  loss=-0.8539  efficiency=85.4%  iter_time=4.5s  ETA=40min
+  iter   80/600  loss=-0.0587  efficiency=5.9%  iter_time=4.5s  ETA=39min
+  iter   90/600  loss=-0.6980  efficiency=69.8%  iter_time=4.5s  ETA=38min
+  iter  100/600  loss=-0.9426  efficiency=94.3%  iter_time=4.5s  ETA=37min
+  Saved checkpoint: results/demux_density_fdtd.npy
+  iter  110/600  loss=-0.9551  efficiency=95.5%  iter_time=4.5s  ETA=37min
+  iter  120/600  loss=-0.9149  efficiency=91.5%  iter_time=4.5s  ETA=36min
+  iter  130/600  loss=-0.9665  efficiency=96.7%  iter_time=4.5s  ETA=35min
+  iter  140/600  loss=-0.9855  efficiency=98.6%  iter_time=4.5s  ETA=34min
+  iter  150/600  loss=-0.9960  efficiency=99.6%  iter_time=4.5s  ETA=34min
+  Saved checkpoint: results/demux_density_fdtd.npy
+  Beta → 6.0 (re-compiling JIT...)
+  iter  160/600  loss=-0.5634  efficiency=56.3%  iter_time=4.5s  ETA=34min
+  iter  170/600  loss=-0.7986  efficiency=79.9%  iter_time=4.5s  ETA=32min
+  iter  180/600  loss=-0.2824  efficiency=28.2%  iter_time=4.5s  ETA=31min
+  iter  190/600  loss=-0.6284  efficiency=62.8%  iter_time=4.5s  ETA=31min
+  iter  200/600  loss=-0.7120  efficiency=71.2%  iter_time=4.5s  ETA=30min
+  Saved checkpoint: results/demux_density_fdtd.npy
+  iter  210/600  loss=-0.4058  efficiency=40.6%  iter_time=4.5s  ETA=29min
+  iter  220/600  loss=-0.6921  efficiency=69.2%  iter_time=4.5s  ETA=28min
+  iter  230/600  loss=-0.5999  efficiency=60.0%  iter_time=4.5s  ETA=28min
+  iter  240/600  loss=-0.9318  efficiency=93.2%  iter_time=4.5s  ETA=27min
+  iter  250/600  loss=-0.9718  efficiency=97.2%  iter_time=4.5s  ETA=26min
+  Saved checkpoint: results/demux_density_fdtd.npy
+  iter  260/600  loss=-0.9931  efficiency=99.3%  iter_time=4.5s  ETA=25min
+  iter  270/600  loss=-0.9981  efficiency=99.8%  iter_time=4.5s  ETA=25min
+  iter  280/600  loss=-0.9993  efficiency=99.9%  iter_time=4.5s  ETA=24min
+  iter  290/600  loss=-0.9998  efficiency=100.0%  iter_time=4.5s  ETA=23min
+  iter  300/600  loss=-0.9999  efficiency=100.0%  iter_time=4.5s  ETA=22min
+  Saved checkpoint: results/demux_density_fdtd.npy
+  Beta → 8.0 (re-compiling JIT...)
+  iter  310/600  loss=-0.5195  efficiency=52.0%  iter_time=4.5s  ETA=22min
+  iter  320/600  loss=-0.4734  efficiency=47.3%  iter_time=4.5s  ETA=21min
+  iter  330/600  loss=-0.4273  efficiency=42.7%  iter_time=4.5s  ETA=20min
+  iter  340/600  loss=-0.4327  efficiency=43.3%  iter_time=4.5s  ETA=19min
+  iter  350/600  loss=-0.5213  efficiency=52.1%  iter_time=4.5s  ETA=19min
+  Saved checkpoint: results/demux_density_fdtd.npy
+  iter  360/600  loss=-0.4854  efficiency=48.5%  iter_time=4.5s  ETA=18min
+  iter  370/600  loss=-0.7404  efficiency=74.0%  iter_time=4.5s  ETA=17min
+  iter  380/600  loss=-0.5102  efficiency=51.0%  iter_time=4.5s  ETA=16min
+  iter  390/600  loss=-0.8879  efficiency=88.8%  iter_time=4.5s  ETA=16min
+  iter  400/600  loss=-0.7986  efficiency=79.9%  iter_time=4.5s  ETA=15min
+  Saved checkpoint: results/demux_density_fdtd.npy
+  iter  410/600  loss=-0.9338  efficiency=93.4%  iter_time=4.5s  ETA=14min
+  iter  420/600  loss=-0.9866  efficiency=98.7%  iter_time=4.5s  ETA=13min
+  iter  430/600  loss=-0.9958  efficiency=99.6%  iter_time=4.5s  ETA=13min
+  iter  440/600  loss=-0.9987  efficiency=99.9%  iter_time=4.5s  ETA=12min
+  iter  450/600  loss=-0.9995  efficiency=100.0%  iter_time=4.5s  ETA=11min
+  Saved checkpoint: results/demux_density_fdtd.npy
+  Beta → 12.0 (re-compiling JIT...)
+  iter  460/600  loss=-0.4250  efficiency=42.5%  iter_time=4.5s  ETA=11min
+  iter  470/600  loss=-0.5718  efficiency=57.2%  iter_time=4.5s  ETA=10min
+  iter  480/600  loss=-0.7557  efficiency=75.6%  iter_time=4.5s  ETA=9min
+  iter  490/600  loss=-0.7534  efficiency=75.3%  iter_time=4.5s  ETA=8min
+  iter  500/600  loss=-0.8812  efficiency=88.1%  iter_time=4.5s  ETA=8min
+  Saved checkpoint: results/demux_density_fdtd.npy
+  iter  510/600  loss=-0.9328  efficiency=93.3%  iter_time=4.5s  ETA=7min
+  iter  520/600  loss=-0.9440  efficiency=94.4%  iter_time=4.5s  ETA=6min
+  iter  530/600  loss=-0.9907  efficiency=99.1%  iter_time=4.5s  ETA=5min
+  iter  540/600  loss=-0.9966  efficiency=99.7%  iter_time=4.5s  ETA=5min
+  iter  550/600  loss=-0.9990  efficiency=99.9%  iter_time=4.5s  ETA=4min
+  Saved checkpoint: results/demux_density_fdtd.npy
+  iter  560/600  loss=-0.9996  efficiency=100.0%  iter_time=4.5s  ETA=3min
+  iter  570/600  loss=-0.9998  efficiency=100.0%  iter_time=4.5s  ETA=2min
+  iter  580/600  loss=-0.9999  efficiency=100.0%  iter_time=4.5s  ETA=2min
+  iter  590/600  loss=-0.9999  efficiency=100.0%  iter_time=4.5s  ETA=1min
+  iter  600/600  loss=-1.0000  efficiency=100.0%  iter_time=4.5s  ETA=0min
+  Saved checkpoint: results/demux_density_fdtd.npy
+  Final save: results/demux_density_fdtd.npy
+  Avg iter time (excluding JIT warmup): 4.499s
+Optimization complete. Saved to results/demux_density_fdtd.npy
+Run fdtdx_validation.py to validate.
