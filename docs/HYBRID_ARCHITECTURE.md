@@ -1,6 +1,7 @@
-# NRadix Hybrid Architecture: Optical Multiply + Electronic Accumulate
+# Hybrid Architecture: Optical Multiply + Electronic Accumulate
 
-**Status:** Architecture correction — March 23, 2026
+**Status:** Architecture designed — March 24, 2026
+**Platform:** LNOI (thin-film lithium niobate on insulator)
 **Supersedes:** All prior "fully optical MAC" claims
 
 ---
@@ -87,12 +88,26 @@ At each PE position, instead of a single SFG waveguide, there is a **chamber** c
 - **No pre-knowledge of inputs** required.
 - **Physics does ALL the selection** — the chip is entirely passive in the optical domain.
 
-### Chamber contents (for ternary {1, 2, 3})
+### Chamber contents (current 3×3 chip design)
 
-- 9 PPLN waveguides with poling periods spanning 19.79-22.55 um
-- Each tuned to one of the 9 possible input pairs
-- 6 unique output frequencies (382-402 THz)
-- Validated: wrong-pair suppression is 32-80 dB
+Each SFG chamber contains **6 PPLN waveguides** — one for each (color × weight) pair:
+
+| SFG Element | Input λ | Weight λ | Output λ | Poling Period |
+|-------------|---------|----------|----------|---------------|
+| R+1 | 1560 nm | 1070 nm | 634.68 nm | 13.549 μm |
+| R-1 | 1560 nm | 1040 nm | 624.00 nm | 12.975 μm |
+| G+1 | 1540 nm | 1070 nm | 631.34 nm | 13.331 μm |
+| G-1 | 1540 nm | 1040 nm | 620.78 nm | 12.765 μm |
+| B+1 | 1520 nm | 1070 nm | 627.95 nm | 13.111 μm |
+| B-1 | 1520 nm | 1040 nm | 617.50 nm | 12.553 μm |
+
+- All 6 outputs land in the visible orange-red range (617-635 nm)
+- Minimum spectral separation: 3.22 nm — standard bandpass filters work
+- Poling periods all within standard PPLN fabrication range
+- Silicon photodiodes detect the outputs (no exotic III-V detectors needed)
+- 6 SFGs per chamber because SFG technology is immature — future broadband SFGs consolidate to 1 per chamber
+
+See `gds/wavelength_design.py` for the full calculation with Sellmeier equations.
 
 ### Encoding flexibility
 
@@ -276,16 +291,111 @@ The optical hybrid does not solve the memory wall. Nothing does. But it eliminat
 
 ---
 
-## 10. Path Forward
+## 10. Physical Chip Design (March 24, 2026)
 
-The hybrid architecture is not a retreat. It is the correct design.
+### 3×3 Chip — designed by hand, no inverse-design optimization
 
-Optical multiply via SFG is real, validated, and physically advantageous. Forcing accumulation into the optical domain was an error — it cannot work due to information loss in superposition, and it was never necessary. Electronic accumulation is cheap, fast, and well-understood.
+The architecture was designed directly from first principles. The physics dictates the layout — SFG frequency matching does the computation, gates do the selection, detectors do the readout.
 
-The value proposition remains: replace the most power-hungry operation in matrix arithmetic (multiply) with a passive optical process that runs at the speed of light and dissipates milliwatts. Let electronics handle everything it's good at.
+#### Signal flow
 
-Next steps:
-1. Design the photodetector array and adder tree for the target vector dimension
-2. Characterize the optical-to-electronic boundary: detector responsivity, noise floor, bit error rate at target data rates
-3. Build a detailed power model: laser wall-plug efficiency, detector bias power, adder tree power at target dimension
-4. Quantify cooling savings: thermal simulation of passive SFG chamber vs electronic multiply die at equivalent throughput
+```
+3 RGB Lasers (always on: 1560/1540/1520 nm)
+    │
+    ├──► Vertical distribution buses (1 per color)
+    │
+    ├──► Per-row: 3 color gates (EO MZI switches) → WDM merge → row input channel
+    │
+    ▼
+3×3 Grid of SFG Chambers ◄── 2 Weight Buses (+1 @ 1070nm, -1 @ 1040nm, always on)
+    │                              │
+    │                         2 weight gates per chamber (EO MZI)
+    │
+    ▼
+9 Chambers × 6 SFG elements each = 54 PPLN sections
+    │
+    ▼
+54 Si Photodetectors → 3 Column Adder Trees → 3 Dot Products
+```
+
+#### Gate architecture
+
+Each SFG chamber has 2 controllable gates (MZI switches):
+- **+1 gate**: opens to allow the +1 weight (1070 nm) into the chamber
+- **-1 gate**: opens to allow the -1 weight (1040 nm) into the chamber
+- **Both closed**: multiply by zero (no weight enters, no SFG output)
+
+Each row has 3 input gates that select which color enters:
+- **R gate**: passes 1560 nm
+- **G gate**: passes 1540 nm
+- **B gate**: passes 1520 nm
+
+Total: **27 controllable gates** (9 input + 18 weight). All electro-optic MZI switches using lithium niobate's native EO effect — no external modulators needed.
+
+#### SFG selection mechanism
+
+When an input wavelength and a weight wavelength enter a chamber simultaneously, **only the PPLN waveguide tuned to that specific frequency pair** produces output via sum-frequency generation. The other 5 elements are phase-mismatched and stay dark. No switching logic inside the chamber — the poling period physically determines which pair activates.
+
+#### Chip specifications
+
+| Parameter | Value |
+|-----------|-------|
+| Platform | LNOI (thin-film LiNbO₃ on insulator) |
+| Chip size | 3.2 × 2.7 mm |
+| Waveguide | 800 nm wide × 400 nm thick (single-mode @ 1550 nm) |
+| Min bend radius | 50 μm |
+| Edge couplers | 5 (3 RGB + 2 weight), 200 μm taper |
+| MZI gates | 27 (EO, ground-signal-ground electrodes) |
+| SFG elements | 54 (6 per chamber × 9 chambers) |
+| Poling periods | 12.553 – 13.549 μm |
+| Detectors | 54 Si photodiodes (sensitive @ 617-635 nm) |
+| Bond pads | 54 (27 gate control + 27 detector readout) |
+
+### Fab-level GDS files
+
+Two GDS representations exist:
+
+1. **Schematic GDS** (`gds/hybrid_chip_3x3.gds`) — block-diagram level, shows architecture and connectivity
+2. **Fab GDS** (`gds/hybrid_chip_fab.gds`) — real LNOI component geometries:
+   - Edge couplers with 800nm→200nm tapers
+   - MZI switches with Y-splitters, parallel arms, GSG electrodes
+   - PPLN sections with actual poling domain patterns
+   - Ge-on-LN photodetector pads with contact openings
+   - Bond pads for wire bonding
+
+Open with [KLayout](https://www.klayout.de/) for inspection: `brew install klayout`
+
+### Scaling roadmap
+
+The 6-SFG-per-chamber design is a consequence of immature SFG technology — current PPLN can only be tuned to one frequency pair at a time. As SFG tech matures:
+
+1. **Near term:** 6 individual PPLN waveguides per chamber (current design)
+2. **Mid term:** Broadband SFG that handles multiple pairs → consolidate to 1 per chamber
+3. **Long term:** 6-triplet WDM — 6 chips worth of compute on 1 chip, same power
+
+No architecture changes needed. The gate structure and detector layout stay the same.
+
+---
+
+## 11. Path Forward
+
+The hybrid architecture is the correct design. The value proposition: replace the most power-hungry operation in matrix arithmetic (multiply) with a passive optical process that dissipates milliwatts. Let electronics handle everything it's good at.
+
+### Immediate next steps
+1. Fix weight bus → SFG routing in fab GDS (weight MZI outputs need waveguide connections to SFG elements)
+2. Add WDM couplers at SFG entry (combine input + weight light before PPLN section)
+3. Output demux design (AWG or ring filters to separate 6 SFG wavelengths per chamber)
+4. Bond pad metal trace routing
+5. DRC check against target LNOI foundry rules
+
+### Simulation priorities
+1. SFG conversion efficiency vs PPLN interaction length
+2. MZI extinction ratio requirements for clean ternary switching
+3. Detector responsivity and noise floor at 617-635 nm
+4. Column adder tree circuit design (electronic)
+
+### Fabrication path
+1. Select LNOI foundry (LIGENTEC, HyperLight, or equivalent)
+2. DRC and DFM review
+3. MPW submission for first silicon (3×3 test chip)
+4. Post-fab characterization: SFG efficiency, gate switching, detector response
