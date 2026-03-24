@@ -1,1 +1,0 @@
-# Circuit simulation test suite
