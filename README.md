@@ -6,6 +6,18 @@
 
 ---
 
+> **⚠️ Architecture Correction — March 2026**
+>
+> **Optical domain logic via wavelength-selective processing is not viable.**
+>
+> This architecture demonstrates that wavelength-selective routing (SFG + inverse-designed AWG) can correctly *route* product frequencies to output ports. That part works and is validated. However, it is not viable to perform general-purpose *logic* — decisions, conditionals, accumulation across multiple cycles, carry propagation — purely in the optical domain using this approach.
+>
+> The core issue: photons carry energy and phase but have no inherent memory or conditional behavior. Wavelength-selective routing can map inputs to outputs, but it cannot branch, compare, or retain state without detection and re-emission. Any architecture requiring multi-step computation, feedback, or carry chains must cross into the electronic domain at those points.
+>
+> **What this repo validates:** passive photonic routing components (multiply unit, 19-port demux) with foundry-realistic ER. These remain valid as *analog front-end* elements feeding electronic processing — not as standalone optical computers.
+
+---
+
 ## How It Works
 
 Standard ternary computing failed commercially because encoding three states costs ~40× more transistors per trit than binary. This project sidesteps that entirely using wavelength-division encoding: each trit value is a laser frequency, and optical physics does the rest.
